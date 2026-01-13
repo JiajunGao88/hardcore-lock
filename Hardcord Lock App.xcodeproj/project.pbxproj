@@ -1,0 +1,591 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		584CA7BD2F16EF1200251A11 /* Hardcord_Lock_AppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 584CA7BC2F16EF1200251A11 /* Hardcord_Lock_AppApp.swift */; };
+		584CA7BF2F16EF1200251A11 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 584CA7BE2F16EF1200251A11 /* ContentView.swift */; };
+		584CA7C12F16EF1200251A11 /* Item.swift in Sources */ = {isa = PBXBuildFile; fileRef = 584CA7C02F16EF1200251A11 /* Item.swift */; };
+		584CA7C32F16EF1500251A11 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 584CA7C22F16EF1500251A11 /* Assets.xcassets */; };
+		584CA7C62F16EF1500251A11 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 584CA7C52F16EF1500251A11 /* Preview Assets.xcassets */; };
+		584CA7D02F16EF1500251A11 /* Hardcord_Lock_AppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 584CA7CF2F16EF1500251A11 /* Hardcord_Lock_AppTests.swift */; };
+		584CA7DA2F16EF1500251A11 /* Hardcord_Lock_AppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 584CA7D92F16EF1500251A11 /* Hardcord_Lock_AppUITests.swift */; };
+		584CA7DC2F16EF1500251A11 /* Hardcord_Lock_AppUITestsLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 584CA7DB2F16EF1500251A11 /* Hardcord_Lock_AppUITestsLaunchTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		584CA7CC2F16EF1500251A11 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 584CA7B12F16EF1200251A11 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 584CA7B82F16EF1200251A11;
+			remoteInfo = "Hardcord Lock App";
+		};
+		584CA7D62F16EF1500251A11 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 584CA7B12F16EF1200251A11 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 584CA7B82F16EF1200251A11;
+			remoteInfo = "Hardcord Lock App";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		584CA7B92F16EF1200251A11 /* Hardcord Lock App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Hardcord Lock App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		584CA7BC2F16EF1200251A11 /* Hardcord_Lock_AppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hardcord_Lock_AppApp.swift; sourceTree = "<group>"; };
+		584CA7BE2F16EF1200251A11 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		584CA7C02F16EF1200251A11 /* Item.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Item.swift; sourceTree = "<group>"; };
+		584CA7C22F16EF1500251A11 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		584CA7C52F16EF1500251A11 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
+		584CA7CB2F16EF1500251A11 /* Hardcord Lock AppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Hardcord Lock AppTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		584CA7CF2F16EF1500251A11 /* Hardcord_Lock_AppTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hardcord_Lock_AppTests.swift; sourceTree = "<group>"; };
+		584CA7D52F16EF1500251A11 /* Hardcord Lock AppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Hardcord Lock AppUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		584CA7D92F16EF1500251A11 /* Hardcord_Lock_AppUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hardcord_Lock_AppUITests.swift; sourceTree = "<group>"; };
+		584CA7DB2F16EF1500251A11 /* Hardcord_Lock_AppUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hardcord_Lock_AppUITestsLaunchTests.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		584CA7B62F16EF1200251A11 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		584CA7C82F16EF1500251A11 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		584CA7D22F16EF1500251A11 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		584CA7B02F16EF1200251A11 = {
+			isa = PBXGroup;
+			children = (
+				584CA7BB2F16EF1200251A11 /* Hardcord Lock App */,
+				584CA7CE2F16EF1500251A11 /* Hardcord Lock AppTests */,
+				584CA7D82F16EF1500251A11 /* Hardcord Lock AppUITests */,
+				584CA7BA2F16EF1200251A11 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		584CA7BA2F16EF1200251A11 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				584CA7B92F16EF1200251A11 /* Hardcord Lock App.app */,
+				584CA7CB2F16EF1500251A11 /* Hardcord Lock AppTests.xctest */,
+				584CA7D52F16EF1500251A11 /* Hardcord Lock AppUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		584CA7BB2F16EF1200251A11 /* Hardcord Lock App */ = {
+			isa = PBXGroup;
+			children = (
+				584CA7BC2F16EF1200251A11 /* Hardcord_Lock_AppApp.swift */,
+				584CA7BE2F16EF1200251A11 /* ContentView.swift */,
+				584CA7C02F16EF1200251A11 /* Item.swift */,
+				584CA7C22F16EF1500251A11 /* Assets.xcassets */,
+				584CA7C42F16EF1500251A11 /* Preview Content */,
+			);
+			path = "Hardcord Lock App";
+			sourceTree = "<group>";
+		};
+		584CA7C42F16EF1500251A11 /* Preview Content */ = {
+			isa = PBXGroup;
+			children = (
+				584CA7C52F16EF1500251A11 /* Preview Assets.xcassets */,
+			);
+			path = "Preview Content";
+			sourceTree = "<group>";
+		};
+		584CA7CE2F16EF1500251A11 /* Hardcord Lock AppTests */ = {
+			isa = PBXGroup;
+			children = (
+				584CA7CF2F16EF1500251A11 /* Hardcord_Lock_AppTests.swift */,
+			);
+			path = "Hardcord Lock AppTests";
+			sourceTree = "<group>";
+		};
+		584CA7D82F16EF1500251A11 /* Hardcord Lock AppUITests */ = {
+			isa = PBXGroup;
+			children = (
+				584CA7D92F16EF1500251A11 /* Hardcord_Lock_AppUITests.swift */,
+				584CA7DB2F16EF1500251A11 /* Hardcord_Lock_AppUITestsLaunchTests.swift */,
+			);
+			path = "Hardcord Lock AppUITests";
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		584CA7B82F16EF1200251A11 /* Hardcord Lock App */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 584CA7DF2F16EF1500251A11 /* Build configuration list for PBXNativeTarget "Hardcord Lock App" */;
+			buildPhases = (
+				584CA7B52F16EF1200251A11 /* Sources */,
+				584CA7B62F16EF1200251A11 /* Frameworks */,
+				584CA7B72F16EF1200251A11 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "Hardcord Lock App";
+			productName = "Hardcord Lock App";
+			productReference = 584CA7B92F16EF1200251A11 /* Hardcord Lock App.app */;
+			productType = "com.apple.product-type.application";
+		};
+		584CA7CA2F16EF1500251A11 /* Hardcord Lock AppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 584CA7E22F16EF1500251A11 /* Build configuration list for PBXNativeTarget "Hardcord Lock AppTests" */;
+			buildPhases = (
+				584CA7C72F16EF1500251A11 /* Sources */,
+				584CA7C82F16EF1500251A11 /* Frameworks */,
+				584CA7C92F16EF1500251A11 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				584CA7CD2F16EF1500251A11 /* PBXTargetDependency */,
+			);
+			name = "Hardcord Lock AppTests";
+			productName = "Hardcord Lock AppTests";
+			productReference = 584CA7CB2F16EF1500251A11 /* Hardcord Lock AppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		584CA7D42F16EF1500251A11 /* Hardcord Lock AppUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 584CA7E52F16EF1500251A11 /* Build configuration list for PBXNativeTarget "Hardcord Lock AppUITests" */;
+			buildPhases = (
+				584CA7D12F16EF1500251A11 /* Sources */,
+				584CA7D22F16EF1500251A11 /* Frameworks */,
+				584CA7D32F16EF1500251A11 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				584CA7D72F16EF1500251A11 /* PBXTargetDependency */,
+			);
+			name = "Hardcord Lock AppUITests";
+			productName = "Hardcord Lock AppUITests";
+			productReference = 584CA7D52F16EF1500251A11 /* Hardcord Lock AppUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		584CA7B12F16EF1200251A11 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1540;
+				LastUpgradeCheck = 1540;
+				TargetAttributes = {
+					584CA7B82F16EF1200251A11 = {
+						CreatedOnToolsVersion = 15.4;
+					};
+					584CA7CA2F16EF1500251A11 = {
+						CreatedOnToolsVersion = 15.4;
+						TestTargetID = 584CA7B82F16EF1200251A11;
+					};
+					584CA7D42F16EF1500251A11 = {
+						CreatedOnToolsVersion = 15.4;
+						TestTargetID = 584CA7B82F16EF1200251A11;
+					};
+				};
+			};
+			buildConfigurationList = 584CA7B42F16EF1200251A11 /* Build configuration list for PBXProject "Hardcord Lock App" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 584CA7B02F16EF1200251A11;
+			productRefGroup = 584CA7BA2F16EF1200251A11 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				584CA7B82F16EF1200251A11 /* Hardcord Lock App */,
+				584CA7CA2F16EF1500251A11 /* Hardcord Lock AppTests */,
+				584CA7D42F16EF1500251A11 /* Hardcord Lock AppUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		584CA7B72F16EF1200251A11 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				584CA7C62F16EF1500251A11 /* Preview Assets.xcassets in Resources */,
+				584CA7C32F16EF1500251A11 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		584CA7C92F16EF1500251A11 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		584CA7D32F16EF1500251A11 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		584CA7B52F16EF1200251A11 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				584CA7BF2F16EF1200251A11 /* ContentView.swift in Sources */,
+				584CA7C12F16EF1200251A11 /* Item.swift in Sources */,
+				584CA7BD2F16EF1200251A11 /* Hardcord_Lock_AppApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		584CA7C72F16EF1500251A11 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				584CA7D02F16EF1500251A11 /* Hardcord_Lock_AppTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		584CA7D12F16EF1500251A11 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				584CA7DC2F16EF1500251A11 /* Hardcord_Lock_AppUITestsLaunchTests.swift in Sources */,
+				584CA7DA2F16EF1500251A11 /* Hardcord_Lock_AppUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		584CA7CD2F16EF1500251A11 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 584CA7B82F16EF1200251A11 /* Hardcord Lock App */;
+			targetProxy = 584CA7CC2F16EF1500251A11 /* PBXContainerItemProxy */;
+		};
+		584CA7D72F16EF1500251A11 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 584CA7B82F16EF1200251A11 /* Hardcord Lock App */;
+			targetProxy = 584CA7D62F16EF1500251A11 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		584CA7DD2F16EF1500251A11 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.5;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		584CA7DE2F16EF1500251A11 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.5;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		584CA7E02F16EF1500251A11 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"Hardcord Lock App/Preview Content\"";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "bluewavetradingllc.Hardcord-Lock-App";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		584CA7E12F16EF1500251A11 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"Hardcord Lock App/Preview Content\"";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "bluewavetradingllc.Hardcord-Lock-App";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		584CA7E32F16EF1500251A11 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "bluewavetradingllc.Hardcord-Lock-AppTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Hardcord Lock App.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Hardcord Lock App";
+			};
+			name = Debug;
+		};
+		584CA7E42F16EF1500251A11 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "bluewavetradingllc.Hardcord-Lock-AppTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Hardcord Lock App.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Hardcord Lock App";
+			};
+			name = Release;
+		};
+		584CA7E62F16EF1500251A11 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "bluewavetradingllc.Hardcord-Lock-AppUITests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = "Hardcord Lock App";
+			};
+			name = Debug;
+		};
+		584CA7E72F16EF1500251A11 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "bluewavetradingllc.Hardcord-Lock-AppUITests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = "Hardcord Lock App";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		584CA7B42F16EF1200251A11 /* Build configuration list for PBXProject "Hardcord Lock App" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				584CA7DD2F16EF1500251A11 /* Debug */,
+				584CA7DE2F16EF1500251A11 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		584CA7DF2F16EF1500251A11 /* Build configuration list for PBXNativeTarget "Hardcord Lock App" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				584CA7E02F16EF1500251A11 /* Debug */,
+				584CA7E12F16EF1500251A11 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		584CA7E22F16EF1500251A11 /* Build configuration list for PBXNativeTarget "Hardcord Lock AppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				584CA7E32F16EF1500251A11 /* Debug */,
+				584CA7E42F16EF1500251A11 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		584CA7E52F16EF1500251A11 /* Build configuration list for PBXNativeTarget "Hardcord Lock AppUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				584CA7E62F16EF1500251A11 /* Debug */,
+				584CA7E72F16EF1500251A11 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 584CA7B12F16EF1200251A11 /* Project object */;
+}
