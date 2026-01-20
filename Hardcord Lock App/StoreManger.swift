@@ -51,30 +51,30 @@ final class StoreManager: ObservableObject {
         completedLockCount += 1
         UserDefaults.standard.set(completedLockCount, forKey: "completedLockCount")
         UserDefaults.standard.synchronize()
-        print("🔒 已完成锁定次数: \(completedLockCount)")
+        print("🔒 Completed locks: \(completedLockCount)")
     }
     
     deinit {
         updateListenerTask?.cancel()
     }
     
-    // MARK: - 加载产品
+    // MARK: - Load products
     
     func loadProducts() async {
         do {
             let products = try await Product.products(for: [productId])
             product = products.first
-            print("✅ 产品加载成功: \(product?.displayName ?? "无")")
+            print("✅ Product loaded: \(product?.displayName ?? "none")")
         } catch {
-            print("❌ 产品加载失败: \(error)")
+            print("❌ Product load failed: \(error)")
         }
     }
     
-    // MARK: - 购买
+    // MARK: - Purchase
     
     func purchase() async throws -> Bool {
         guard let product = product else {
-            print("❌ 产品未找到")
+            print("❌ Product not found")
             throw StoreError.productNotFound
         }
         
@@ -88,15 +88,15 @@ final class StoreManager: ObservableObject {
             let transaction = try checkVerified(verification)
             await transaction.finish()
             await updatePurchaseStatus()
-            print("✅ 购买成功!")
+            print("✅ Purchase successful!")
             return true
             
         case .userCancelled:
-            print("⚠️ 用户取消购买")
+            print("⚠️ User cancelled purchase")
             return false
             
         case .pending:
-            print("⏳ 购买待处理")
+            print("⏳ Purchase pending")
             return false
             
         @unknown default:
@@ -104,7 +104,7 @@ final class StoreManager: ObservableObject {
         }
     }
     
-    // MARK: - 恢复购买
+    // MARK: - Restore purchases
     
     func restorePurchases() async throws {
         isLoading = true
@@ -112,10 +112,10 @@ final class StoreManager: ObservableObject {
         
         try await AppStore.sync()
         await updatePurchaseStatus()
-        print("✅ 恢复购买完成")
+        print("✅ Restore purchase completed")
     }
     
-    // MARK: - 检查购买状态
+    // MARK: - Check purchase status
     
     func updatePurchaseStatus() async {
         for await result in Transaction.currentEntitlements {
@@ -123,23 +123,23 @@ final class StoreManager: ObservableObject {
                 if transaction.productID == productId {
                     purchasedPro = true
                     UserDefaults.standard.set(true, forKey: "purchasedPro")
-                    print("✅ Pro 已购买")
+                    print("✅ Pro purchased")
                     return
                 }
             }
         }
-        // 如果没有找到有效购买，但本地有记录，保持状态
-        // 这样即使离线也能使用
+        // If no valid purchase found but local record exists, keep status
+        // This allows offline usage
     }
     
-    // MARK: - 开发测试用：模拟购买
+    // MARK: - Debug functions (development only)
     
     #if DEBUG
     func simulatePurchase() {
         purchasedPro = true
         UserDefaults.standard.set(true, forKey: "purchasedPro")
         UserDefaults.standard.synchronize()
-        print("🧪 模拟购买成功（仅开发模式）")
+        print("🧪 Simulated purchase (debug mode only)")
     }
     
     func debugResetPurchase() {
@@ -148,14 +148,14 @@ final class StoreManager: ObservableObject {
         UserDefaults.standard.set(false, forKey: "purchasedPro")
         UserDefaults.standard.set(0, forKey: "completedLockCount")
         UserDefaults.standard.synchronize()
-        print("🧪 购买状态和锁定次数已重置（仅开发模式）")
+        print("🧪 Purchase and lock count reset (debug mode only)")
     }
     
     func debugSetLockCompleted() {
         completedLockCount = 1
         UserDefaults.standard.set(1, forKey: "completedLockCount")
         UserDefaults.standard.synchronize()
-        print("🧪 已设置为完成1次锁定（仅开发模式）")
+        print("🧪 Set to 1 completed lock (debug mode only)")
     }
     #endif
     
@@ -191,9 +191,9 @@ enum StoreError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .productNotFound:
-            return "产品未找到"
+            return "Product not found"
         case .verificationFailed:
-            return "验证失败"
+            return "Verification failed"
         }
     }
 }

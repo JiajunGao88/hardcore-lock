@@ -3,10 +3,10 @@
 //  Hardcord Lock App
 //
 
+import Foundation
 import FamilyControls
 import ManagedSettings
 import Combine
-import Foundation
 
 @MainActor
 final class FamilyControlsManager: ObservableObject {
@@ -21,22 +21,22 @@ final class FamilyControlsManager: ObservableObject {
     private let authorizationKey = "screenTimeAuthorized"
     
     private init() {
-        // 先从 UserDefaults 读取缓存的授权状态
+        // Read cached authorization state from UserDefaults first
         let cachedAuth = UserDefaults.standard.bool(forKey: authorizationKey)
         
-        // 然后检查实际授权状态
+        // Then check actual authorization status
         checkAuthorizationStatus()
         
-        // 如果之前已授权但当前检测失败（可能是 Preview 模式问题），使用缓存值
+        // If previously authorized but current check fails (possibly Preview mode issue), use cached value
         if cachedAuth && !isAuthorized {
-            // 再次验证实际状态
+            // Verify actual status again
             if center.authorizationStatus == .approved {
                 isAuthorized = true
             } else {
-                // 在真机上如果之前授权过，可能只是状态读取延迟
-                // 保持 cachedAuth 状态，避免频繁显示授权按钮
+                // On real device, if previously authorized, might just be delayed status read
+                // Keep cached status to avoid frequent authorization button display
                 isAuthorized = cachedAuth
-                print("⚠️ 使用缓存的授权状态: \(cachedAuth)")
+                print("⚠️ Using cached authorization status: \(cachedAuth)")
             }
         }
     }
@@ -45,19 +45,19 @@ final class FamilyControlsManager: ObservableObject {
         switch center.authorizationStatus {
         case .approved:
             isAuthorized = true
-            // 缓存授权状态
+            // Cache authorization status
             UserDefaults.standard.set(true, forKey: authorizationKey)
-            print("✅ Screen Time 已授权")
+            print("✅ Screen Time authorized")
         case .denied:
             isAuthorized = false
             UserDefaults.standard.set(false, forKey: authorizationKey)
-            print("❌ Screen Time 授权被拒绝")
+            print("❌ Screen Time authorization denied")
         case .notDetermined:
-            // 只有在没有缓存的情况下才设为 false
+            // Only set to false if no cache exists
             if !UserDefaults.standard.bool(forKey: authorizationKey) {
                 isAuthorized = false
             }
-            print("⏳ Screen Time 授权待确定")
+            print("⏳ Screen Time authorization pending")
         @unknown default:
             isAuthorized = false
         }
@@ -65,22 +65,22 @@ final class FamilyControlsManager: ObservableObject {
     }
     
     func requestAuthorization() async throws {
-        print("📱 请求 Screen Time 授权...")
+        print("📱 Requesting Screen Time authorization...")
         try await center.requestAuthorization(for: .individual)
         
-        // 授权成功后更新状态
+        // Update status after authorization
         checkAuthorizationStatus()
         
-        // 确保授权状态被保存
+        // Ensure authorization status is saved
         if center.authorizationStatus == .approved {
             isAuthorized = true
             UserDefaults.standard.set(true, forKey: authorizationKey)
             UserDefaults.standard.synchronize()
-            print("✅ Screen Time 授权成功并已缓存")
+            print("✅ Screen Time authorized and cached")
         }
     }
     
-    // MARK: - 强制刷新授权状态
+    // MARK: - Force refresh authorization status
     func refreshAuthorizationStatus() {
         let status = center.authorizationStatus
         switch status {
@@ -91,22 +91,22 @@ final class FamilyControlsManager: ObservableObject {
             isAuthorized = false
             UserDefaults.standard.set(false, forKey: authorizationKey)
         case .notDetermined:
-            // 保持当前状态
+            // Keep current status
             break
         @unknown default:
             break
         }
         UserDefaults.standard.synchronize()
-        print("🔄 授权状态刷新: \(status), isAuthorized: \(isAuthorized)")
+        print("🔄 Authorization status refreshed: \(status), isAuthorized: \(isAuthorized)")
     }
     
-    // MARK: - 调试用：重置授权缓存
+    // MARK: - Debug: Reset authorization cache
     #if DEBUG
     func debugResetAuthCache() {
         UserDefaults.standard.removeObject(forKey: authorizationKey)
         UserDefaults.standard.synchronize()
         checkAuthorizationStatus()
-        print("🧪 DEBUG: 授权缓存已重置")
+        print("🧪 DEBUG: Authorization cache reset")
     }
     #endif
 }

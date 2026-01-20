@@ -309,7 +309,7 @@ struct ContentView: View {
             
             // 倒计时 - 使用较小字体确保长时间也能显示在一行
             Text(lockManager.formatTime(lockManager.remainingSeconds))
-                .font(.system(size: 60, weight: .bold, design: .monospaced))
+                .font(.system(size: 48, weight: .bold, design: .monospaced))
                 .foregroundColor(.white)
                 .minimumScaleFactor(0.5)
                 .lineLimit(1)
@@ -571,7 +571,7 @@ struct ContentView: View {
         } catch {
             errorMessage = "Start lock failed:\n\(error.localizedDescription)"
             showErrorAlert = true
-            print("❌ 启动锁定失败: \(error)")
+            print("❌ Lock start failed: \(error)")
         }
     }
     
@@ -580,7 +580,7 @@ struct ContentView: View {
             do {
                 try await familyControls.requestAuthorization()
             } catch {
-                print("❌ 授权失败: \(error)")
+                print("❌ Authorization failed: \(error)")
             }
         }
     }
@@ -687,7 +687,7 @@ struct PaywallView: View {
                     onPurchaseSuccess()
                 }
             } catch {
-                print("❌ 购买失败: \(error)")
+                print("❌ Purchase failed: \(error)")
             }
         }
     }
@@ -700,7 +700,7 @@ struct PaywallView: View {
                     dismiss()
                 }
             } catch {
-                print("❌ 恢复购买失败: \(error)")
+                print("❌ Restore purchase failed: \(error)")
             }
         }
     }

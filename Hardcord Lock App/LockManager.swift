@@ -50,7 +50,7 @@ final class LockManager: ObservableObject {
         // 安排本地通知（在锁定结束时）
         scheduleNotification(in: duration)
         
-        print("🔒 锁定开始，时长: \(duration) 秒")
+        print("🔒 Lock started, duration: \(duration) seconds")
     }
     
     // MARK: - 检查未完成的锁定
@@ -68,7 +68,7 @@ final class LockManager: ObservableObject {
             lockStartTime = UserDefaults.standard.object(forKey: "lockStartTime") as? Date
             remainingSeconds = Int(savedEndTime.timeIntervalSince(now))
             startDisplayTimer()
-            print("🔒 恢复未完成的锁定，剩余: \(remainingSeconds) 秒")
+            print("🔒 Resuming lock, remaining: \(remainingSeconds) seconds")
         } else {
             // 锁定已结束，计算并累加时间
             if let savedStartTime = UserDefaults.standard.object(forKey: "lockStartTime") as? Date {
@@ -76,7 +76,12 @@ final class LockManager: ObservableObject {
                 if lockedDuration > 0 {
                     totalLockedSeconds += lockedDuration
                     UserDefaults.standard.set(totalLockedSeconds, forKey: "totalLockedSeconds")
-                    print("🔓 检测到已完成的锁定，累加时间: \(lockedDuration) 秒")
+                    print("🔓 Detected completed lock, added time: \(lockedDuration) seconds")
+                    
+                    // 记录完成一次锁定（用于免费试用计数）
+                    Task { @MainActor in
+                        StoreManager.shared.recordCompletedLock()
+                    }
                 }
             }
             // 清理锁定状态
@@ -124,7 +129,7 @@ final class LockManager: ObservableObject {
             if lockedDuration > 0 {
                 totalLockedSeconds += lockedDuration
                 UserDefaults.standard.set(totalLockedSeconds, forKey: "totalLockedSeconds")
-                print("✅ 本次锁定时长: \(lockedDuration) 秒，累计: \(totalLockedSeconds) 秒")
+                print("✅ Lock duration: \(lockedDuration) seconds, total: \(totalLockedSeconds) seconds")
                 
                 // 记录完成一次锁定（用于免费试用计数）
                 Task { @MainActor in
@@ -137,7 +142,7 @@ final class LockManager: ObservableObject {
         remainingSeconds = 0
         clearLockState()
         
-        print("🔓 锁定结束！累计锁定: \(totalLockedSeconds) 秒 (\(formatTotalTime(totalLockedSeconds)))")
+        print("🔓 Lock ended! Total: \(totalLockedSeconds) seconds (\(formatTotalTime(totalLockedSeconds)))")
     }
     
     // MARK: - 清理锁定状态
@@ -155,9 +160,9 @@ final class LockManager: ObservableObject {
     private func requestNotificationPermission() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
             if granted {
-                print("✅ 通知权限已授予")
+                print("✅ Notification permission granted")
             } else if let error = error {
-                print("❌ 通知权限请求失败: \(error)")
+                print("❌ Notification permission failed: \(error)")
             }
         }
     }
@@ -174,9 +179,9 @@ final class LockManager: ObservableObject {
         
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {
-                print("❌ 通知安排失败: \(error)")
+                print("❌ Notification scheduling failed: \(error)")
             } else {
-                print("✅ 通知已安排")
+                print("✅ Notification scheduled")
             }
         }
     }
@@ -200,35 +205,35 @@ final class LockManager: ObservableObject {
         return "\(minutes)m"
     }
     
-    // MARK: - 调试用：手动添加时间（仅开发测试）
+    // MARK: - Debug functions (development only)
     #if DEBUG
     func debugAddTime(seconds: Int) {
         totalLockedSeconds += seconds
         UserDefaults.standard.set(totalLockedSeconds, forKey: "totalLockedSeconds")
-        print("🧪 DEBUG: 添加 \(seconds) 秒，累计: \(totalLockedSeconds) 秒")
+        print("🧪 DEBUG: Added \(seconds) seconds, total: \(totalLockedSeconds) seconds")
     }
     
     func debugResetTime() {
         totalLockedSeconds = 0
         UserDefaults.standard.set(0, forKey: "totalLockedSeconds")
-        print("🧪 DEBUG: 重置累计时间为 0")
+        print("🧪 DEBUG: Reset total time to 0")
     }
     
     func debugSkipLock() {
         displayUpdateTimer?.invalidate()
         displayUpdateTimer = nil
         
-        // 计算已经锁定的时间并累加
+        // Calculate locked time and add to total
         if let startTime = lockStartTime {
             let lockedDuration = Int(Date().timeIntervalSince(startTime))
             if lockedDuration > 0 {
                 totalLockedSeconds += lockedDuration
                 UserDefaults.standard.set(totalLockedSeconds, forKey: "totalLockedSeconds")
-                print("🧪 DEBUG: 本次锁定 \(lockedDuration) 秒，累计: \(totalLockedSeconds) 秒")
+                print("🧪 DEBUG: This lock \(lockedDuration) seconds, total: \(totalLockedSeconds) seconds")
             }
         }
         
-        // 记录完成一次锁定
+        // Record completed lock
         Task { @MainActor in
             StoreManager.shared.recordCompletedLock()
         }
@@ -237,7 +242,7 @@ final class LockManager: ObservableObject {
         remainingSeconds = 0
         clearLockState()
         
-        print("🧪 DEBUG: 跳过锁定")
+        print("🧪 DEBUG: Lock skipped")
     }
     #endif
 }
