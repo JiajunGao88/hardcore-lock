@@ -85,6 +85,8 @@ struct ContentView: View {
         }
         .onAppear {
             currentTaunt = tauntingMessages.randomElement() ?? "Stay focused."
+            // 每次应用出现时刷新授权状态
+            familyControls.refreshAuthorizationStatus()
         }
         .alert("DEV", isPresented: $showDevAlert) {
             Button("OK", role: .cancel) {}
@@ -117,9 +119,9 @@ struct ContentView: View {
             .padding(.top, 60)
             .padding(.horizontal, 24)
             
-            // 累计锁定时间
+            // 累计锁定时间 - 显示为小时数
             VStack(alignment: .leading, spacing: 4) {
-                Text("TOTAL TIME")
+                Text("TIME SAVED")
                     .font(.system(size: 12, weight: .regular, design: .monospaced))
                     .foregroundColor(.gray)
                 Text(lockManager.formatTotalTime(lockManager.totalLockedSeconds))
@@ -205,7 +207,7 @@ struct ContentView: View {
                 .padding(.top, 16)
                 .padding(.bottom, 40)
             
-            // 授权按钮（如果未授权）
+            // 授权按钮（仅在未授权时显示）
             if !familyControls.isAuthorized {
                 Button(action: requestAuthorization) {
                     Text("GRANT SCREEN TIME ACCESS")
@@ -219,21 +221,82 @@ struct ContentView: View {
             }
             
             #if DEBUG
-            Button(action: {
-                storeManager.simulatePurchase()
-                devAlertMessage = "✅ Simulated purchase: Pro unlocked"
-                showDevAlert = true
-            }) {
-                Text("🧪 DEV: Simulate Purchase")
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundColor(.yellow)
+            // Debug 按钮组
+            VStack(spacing: 8) {
+                Text("🧪 Locks: \(storeManager.completedLockCount) | Pro: \(storeManager.purchasedPro ? "Yes" : "No")")
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundColor(.gray)
+                
+                HStack(spacing: 12) {
+                    Button(action: {
+                        storeManager.simulatePurchase()
+                        devAlertMessage = "✅ Pro unlocked"
+                        showDevAlert = true
+                    }) {
+                        Text("Buy Pro")
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundColor(.green)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.green.opacity(0.2))
+                    }
+                    
+                    Button(action: {
+                        storeManager.debugResetPurchase()
+                        devAlertMessage = "✅ Reset to new user"
+                        showDevAlert = true
+                    }) {
+                        Text("Reset All")
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundColor(.orange)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.orange.opacity(0.2))
+                    }
+                    
+                    Button(action: {
+                        storeManager.debugSetLockCompleted()
+                        devAlertMessage = "✅ Set 1 lock completed\nNext lock will show Paywall"
+                        showDevAlert = true
+                    }) {
+                        Text("Use Free")
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundColor(.yellow)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.yellow.opacity(0.2))
+                    }
+                }
+                
+                HStack(spacing: 12) {
+                    Button(action: {
+                        lockManager.debugAddTime(seconds: 900)
+                        devAlertMessage = "✅ +15 min\nTotal: \(lockManager.formatTotalTime(lockManager.totalLockedSeconds))"
+                        showDevAlert = true
+                    }) {
+                        Text("+15min")
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundColor(.cyan)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.cyan.opacity(0.2))
+                    }
+                    
+                    Button(action: {
+                        lockManager.debugResetTime()
+                        devAlertMessage = "✅ Time reset to 0"
+                        showDevAlert = true
+                    }) {
+                        Text("Reset Time")
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundColor(.red)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.red.opacity(0.2))
+                    }
+                }
             }
             .padding(.bottom, 10)
-            .alert("DEV", isPresented: $showDevAlert) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(devAlertMessage)
-            }
             #endif
         }
     }
@@ -244,10 +307,12 @@ struct ContentView: View {
         VStack(spacing: 32) {
             Spacer()
             
-            // 倒计时
+            // 倒计时 - 使用较小字体确保长时间也能显示在一行
             Text(lockManager.formatTime(lockManager.remainingSeconds))
-                .font(.system(size: 72, weight: .bold, design: .monospaced))
+                .font(.system(size: 60, weight: .bold, design: .monospaced))
                 .foregroundColor(.white)
+                .minimumScaleFactor(0.5)
+                .lineLimit(1)
             
             // 嘲讽文案
             Text(currentTaunt)
@@ -262,7 +327,23 @@ struct ContentView: View {
             Text("// NO UNLOCK BUTTON")
                 .font(.system(size: 10, weight: .regular, design: .monospaced))
                 .foregroundColor(.gray.opacity(0.3))
-                .padding(.bottom, 40)
+                .padding(.bottom, 20)
+            
+            #if DEBUG
+            // DEV 专用跳过按钮
+            Button(action: {
+                AppBlocker.shared.stopBlocking()
+                lockManager.debugSkipLock()
+            }) {
+                Text("🧪 DEV: Skip Lock")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(.red.opacity(0.6))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Color.red.opacity(0.1))
+            }
+            .padding(.bottom, 20)
+            #endif
         }
         .onReceive(Timer.publish(every: 10, on: .main, in: .common).autoconnect()) { _ in
             currentTaunt = tauntingMessages.randomElement() ?? "Stay focused."
@@ -473,7 +554,7 @@ struct ContentView: View {
     }
     
     private func handleLockPress() {
-        if storeManager.purchasedPro {
+        if storeManager.canStartLock {
             startLock()
         } else {
             showPaywall = true
@@ -517,37 +598,43 @@ struct PaywallView: View {
         ZStack {
             Color.black.ignoresSafeArea()
             
-            VStack(spacing: 32) {
+            VStack(spacing: 0) {
                 Spacer()
                 
-                // 标题
-                VStack(spacing: 8) {
-                    Text("HARDCORE")
-                        .font(.system(size: 32, weight: .bold, design: .monospaced))
+                // 庆祝标题
+                VStack(spacing: 16) {
+                    Text("🎉")
+                        .font(.system(size: 48))
+                    
+                    Text("CONGRATS!")
+                        .font(.system(size: 28, weight: .bold, design: .monospaced))
                         .foregroundColor(.white)
-                    Text("MODE")
-                        .font(.system(size: 32, weight: .bold, design: .monospaced))
-                        .foregroundColor(.white)
+                    
+                    Text("YOU SURVIVED YOUR FIRST LOCK")
+                        .font(.system(size: 14, weight: .medium, design: .monospaced))
+                        .foregroundColor(.gray)
+                        .multilineTextAlignment(.center)
                 }
                 
-                // 价格
-                Text("$3.99")
-                    .font(.system(size: 48, weight: .bold, design: .monospaced))
-                    .foregroundColor(.white)
-                
-                // 副标题
-                Text("FOREVER")
-                    .font(.system(size: 14, weight: .medium, design: .monospaced))
-                    .foregroundColor(.gray)
-                
                 Spacer()
                 
-                // 文案
-                Text("Commit to your life.\nNo subscriptions. No excuses.")
-                    .font(.system(size: 14, weight: .regular, design: .monospaced))
-                    .foregroundColor(.gray)
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(4)
+                // 行动号召
+                VStack(spacing: 24) {
+                    Text("NOW KEEP IT GOING.")
+                        .font(.system(size: 18, weight: .bold, design: .monospaced))
+                        .foregroundColor(.white)
+                    
+                    // 价格
+                    VStack(spacing: 8) {
+                        Text("$4.99")
+                            .font(.system(size: 48, weight: .bold, design: .monospaced))
+                            .foregroundColor(.white)
+                        
+                        Text("ONCE. FOREVER.")
+                            .font(.system(size: 12, weight: .medium, design: .monospaced))
+                            .foregroundColor(.gray)
+                    }
+                }
                 
                 Spacer()
                 
@@ -560,8 +647,8 @@ struct PaywallView: View {
                             .padding(.vertical, 20)
                             .background(Color.white)
                     } else {
-                        Text("UNLOCK")
-                            .font(.system(size: 20, weight: .bold, design: .monospaced))
+                        Text("UNLOCK FOREVER")
+                            .font(.system(size: 18, weight: .bold, design: .monospaced))
                             .foregroundColor(.black)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 20)
@@ -574,18 +661,18 @@ struct PaywallView: View {
                 // 恢复购买
                 Button(action: restore) {
                     Text("RESTORE PURCHASE")
-                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
                         .foregroundColor(.gray)
                 }
-                .padding(.top, 8)
+                .padding(.top, 16)
                 
                 // 关闭按钮
                 Button(action: { dismiss() }) {
                     Text("MAYBE LATER")
-                        .font(.system(size: 12, weight: .regular, design: .monospaced))
-                        .foregroundColor(.gray.opacity(0.5))
+                        .font(.system(size: 11, weight: .regular, design: .monospaced))
+                        .foregroundColor(.gray.opacity(0.4))
                 }
-                .padding(.top, 16)
+                .padding(.top, 12)
                 .padding(.bottom, 40)
             }
         }

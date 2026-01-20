@@ -15,18 +15,43 @@ final class StoreManager: ObservableObject {
     @Published private(set) var product: Product?
     @Published private(set) var purchasedPro: Bool = false
     @Published private(set) var isLoading: Bool = false
+    @Published private(set) var completedLockCount: Int = 0
+    
+    // 免费锁定次数
+    private let freeLockLimit = 1
     
     private var updateListenerTask: Task<Void, Error>?
     
     private init() {
-        // 从 UserDefaults 读取购买状态
+        // 从 UserDefaults 读取购买状态和锁定次数
         purchasedPro = UserDefaults.standard.bool(forKey: "purchasedPro")
+        completedLockCount = UserDefaults.standard.integer(forKey: "completedLockCount")
         
         updateListenerTask = listenForTransactions()
         Task {
             await loadProducts()
             await updatePurchaseStatus()
         }
+    }
+    
+    // MARK: - 免费试用检查
+    
+    /// 是否还有免费锁定次数
+    var hasFreeLockRemaining: Bool {
+        return completedLockCount < freeLockLimit
+    }
+    
+    /// 是否可以开始新的锁定（已购买或还有免费次数）
+    var canStartLock: Bool {
+        return purchasedPro || hasFreeLockRemaining
+    }
+    
+    /// 记录完成一次锁定
+    func recordCompletedLock() {
+        completedLockCount += 1
+        UserDefaults.standard.set(completedLockCount, forKey: "completedLockCount")
+        UserDefaults.standard.synchronize()
+        print("🔒 已完成锁定次数: \(completedLockCount)")
     }
     
     deinit {
@@ -113,7 +138,24 @@ final class StoreManager: ObservableObject {
     func simulatePurchase() {
         purchasedPro = true
         UserDefaults.standard.set(true, forKey: "purchasedPro")
+        UserDefaults.standard.synchronize()
         print("🧪 模拟购买成功（仅开发模式）")
+    }
+    
+    func debugResetPurchase() {
+        purchasedPro = false
+        completedLockCount = 0
+        UserDefaults.standard.set(false, forKey: "purchasedPro")
+        UserDefaults.standard.set(0, forKey: "completedLockCount")
+        UserDefaults.standard.synchronize()
+        print("🧪 购买状态和锁定次数已重置（仅开发模式）")
+    }
+    
+    func debugSetLockCompleted() {
+        completedLockCount = 1
+        UserDefaults.standard.set(1, forKey: "completedLockCount")
+        UserDefaults.standard.synchronize()
+        print("🧪 已设置为完成1次锁定（仅开发模式）")
     }
     #endif
     

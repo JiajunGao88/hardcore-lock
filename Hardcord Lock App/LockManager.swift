@@ -17,6 +17,7 @@ final class LockManager: ObservableObject {
     
     private var timer: Timer?
     private var lockEndTime: Date?
+    private var lockStartTime: Date?  // 新增：记录锁定开始时间
     private var displayUpdateTimer: Timer?
     
     private init() {
@@ -35,9 +36,11 @@ final class LockManager: ObservableObject {
     func startLock(duration: Int) {
         isLocked = true
         remainingSeconds = duration
+        lockStartTime = Date()  // 记录开始时间
         lockEndTime = Date().addingTimeInterval(TimeInterval(duration))
         
-        // 保存锁定结束时间
+        // 保存锁定开始和结束时间
+        UserDefaults.standard.set(lockStartTime, forKey: "lockStartTime")
         UserDefaults.standard.set(lockEndTime, forKey: "lockEndTime")
         UserDefaults.standard.synchronize()
         
@@ -62,12 +65,22 @@ final class LockManager: ObservableObject {
             // 锁定仍在进行中
             isLocked = true
             lockEndTime = savedEndTime
+            lockStartTime = UserDefaults.standard.object(forKey: "lockStartTime") as? Date
             remainingSeconds = Int(savedEndTime.timeIntervalSince(now))
             startDisplayTimer()
             print("🔒 恢复未完成的锁定，剩余: \(remainingSeconds) 秒")
         } else {
-            // 锁定已结束
-            endLock()
+            // 锁定已结束，计算并累加时间
+            if let savedStartTime = UserDefaults.standard.object(forKey: "lockStartTime") as? Date {
+                let lockedDuration = Int(savedEndTime.timeIntervalSince(savedStartTime))
+                if lockedDuration > 0 {
+                    totalLockedSeconds += lockedDuration
+                    UserDefaults.standard.set(totalLockedSeconds, forKey: "totalLockedSeconds")
+                    print("🔓 检测到已完成的锁定，累加时间: \(lockedDuration) 秒")
+                }
+            }
+            // 清理锁定状态
+            clearLockState()
         }
     }
     
@@ -105,19 +118,36 @@ final class LockManager: ObservableObject {
         displayUpdateTimer = nil
         
         // 计算实际锁定时间并累加
-        if let endTime = lockEndTime {
-            let lockedDuration = Int(endTime.timeIntervalSinceNow) * -1
-            totalLockedSeconds += max(0, lockedDuration)
-            UserDefaults.standard.set(totalLockedSeconds, forKey: "totalLockedSeconds")
+        if let startTime = lockStartTime, let endTime = lockEndTime {
+            // 使用开始时间和结束时间计算实际锁定时长
+            let lockedDuration = Int(endTime.timeIntervalSince(startTime))
+            if lockedDuration > 0 {
+                totalLockedSeconds += lockedDuration
+                UserDefaults.standard.set(totalLockedSeconds, forKey: "totalLockedSeconds")
+                print("✅ 本次锁定时长: \(lockedDuration) 秒，累计: \(totalLockedSeconds) 秒")
+                
+                // 记录完成一次锁定（用于免费试用计数）
+                Task { @MainActor in
+                    StoreManager.shared.recordCompletedLock()
+                }
+            }
         }
         
         isLocked = false
         remainingSeconds = 0
-        lockEndTime = nil
-        UserDefaults.standard.removeObject(forKey: "lockEndTime")
-        UserDefaults.standard.synchronize()
+        clearLockState()
         
-        print("🔓 锁定结束！累计锁定: \(totalLockedSeconds) 秒")
+        print("🔓 锁定结束！累计锁定: \(totalLockedSeconds) 秒 (\(formatTotalTime(totalLockedSeconds)))")
+    }
+    
+    // MARK: - 清理锁定状态
+    
+    private func clearLockState() {
+        lockEndTime = nil
+        lockStartTime = nil
+        UserDefaults.standard.removeObject(forKey: "lockEndTime")
+        UserDefaults.standard.removeObject(forKey: "lockStartTime")
+        UserDefaults.standard.synchronize()
     }
     
     // MARK: - 本地通知
@@ -166,16 +196,48 @@ final class LockManager: ObservableObject {
     }
     
     func formatTotalTime(_ seconds: Int) -> String {
-        let days = seconds / 86400
-        let hours = (seconds % 86400) / 3600
-        let minutes = (seconds % 3600) / 60
-        
-        if days > 0 {
-            return "\(days)d \(hours)h"
-        } else if hours > 0 {
-            return "\(hours)h \(minutes)m"
-        } else {
-            return "\(minutes)m"
-        }
+        let minutes = seconds / 60
+        return "\(minutes)m"
     }
+    
+    // MARK: - 调试用：手动添加时间（仅开发测试）
+    #if DEBUG
+    func debugAddTime(seconds: Int) {
+        totalLockedSeconds += seconds
+        UserDefaults.standard.set(totalLockedSeconds, forKey: "totalLockedSeconds")
+        print("🧪 DEBUG: 添加 \(seconds) 秒，累计: \(totalLockedSeconds) 秒")
+    }
+    
+    func debugResetTime() {
+        totalLockedSeconds = 0
+        UserDefaults.standard.set(0, forKey: "totalLockedSeconds")
+        print("🧪 DEBUG: 重置累计时间为 0")
+    }
+    
+    func debugSkipLock() {
+        displayUpdateTimer?.invalidate()
+        displayUpdateTimer = nil
+        
+        // 计算已经锁定的时间并累加
+        if let startTime = lockStartTime {
+            let lockedDuration = Int(Date().timeIntervalSince(startTime))
+            if lockedDuration > 0 {
+                totalLockedSeconds += lockedDuration
+                UserDefaults.standard.set(totalLockedSeconds, forKey: "totalLockedSeconds")
+                print("🧪 DEBUG: 本次锁定 \(lockedDuration) 秒，累计: \(totalLockedSeconds) 秒")
+            }
+        }
+        
+        // 记录完成一次锁定
+        Task { @MainActor in
+            StoreManager.shared.recordCompletedLock()
+        }
+        
+        isLocked = false
+        remainingSeconds = 0
+        clearLockState()
+        
+        print("🧪 DEBUG: 跳过锁定")
+    }
+    #endif
 }
