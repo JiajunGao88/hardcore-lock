@@ -29,7 +29,7 @@ FIFTEEN (Hardcord Lock App) is a focus/digital detox application that uses Apple
   - And 16 more...
 
 ### Business Model
-- **One-time purchase: $3.99** - No subscriptions, lifetime access
+- **One-time purchase: $4.99** - No subscriptions, lifetime access
 - Purchase required before first lock
 - Restore purchases supported
 
