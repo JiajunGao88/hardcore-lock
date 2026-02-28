@@ -85,8 +85,10 @@ struct ContentView: View {
         }
         .onAppear {
             currentTaunt = tauntingMessages.randomElement() ?? "Stay focused."
-            // 每次应用出现时刷新授权状态
             familyControls.refreshAuthorizationStatus()
+            if !familyControls.isAuthorized {
+                requestAuthorization()
+            }
         }
         .alert("DEV", isPresented: $showDevAlert) {
             Button("OK", role: .cancel) {}
@@ -197,8 +199,8 @@ struct ContentView: View {
                     .background(Color.white)
             }
             .padding(.horizontal, 24)
-            .disabled(!familyControls.isAuthorized || !hasSelectionToBlock)
-            .opacity((!familyControls.isAuthorized || !hasSelectionToBlock) ? 0.5 : 1)
+            .disabled(!hasSelectionToBlock)
+            .opacity(!hasSelectionToBlock ? 0.5 : 1)
             
             // 底部文案
             Text("NO ESCAPE. NO REFUNDS.")
@@ -207,18 +209,6 @@ struct ContentView: View {
                 .padding(.top, 16)
                 .padding(.bottom, 40)
             
-            // 授权按钮（仅在未授权时显示）
-            if !familyControls.isAuthorized {
-                Button(action: requestAuthorization) {
-                    Text("GRANT SCREEN TIME ACCESS")
-                        .font(.system(size: 12, weight: .medium, design: .monospaced))
-                        .foregroundColor(.black)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 12)
-                        .background(Color.yellow)
-                }
-                .padding(.bottom, 20)
-            }
             
             #if DEBUG
             // Debug 按钮组
@@ -554,6 +544,24 @@ struct ContentView: View {
     }
     
     private func handleLockPress() {
+        guard familyControls.isAuthorized else {
+            Task {
+                do {
+                    try await familyControls.requestAuthorization()
+                    if familyControls.isAuthorized {
+                        proceedWithLock()
+                    }
+                } catch {
+                    errorMessage = "Screen Time access is required.\nPlease enable it in Settings > Screen Time."
+                    showErrorAlert = true
+                }
+            }
+            return
+        }
+        proceedWithLock()
+    }
+    
+    private func proceedWithLock() {
         if storeManager.canStartLock {
             startLock()
         } else {
@@ -592,6 +600,11 @@ struct PaywallView: View {
     @StateObject private var storeManager = StoreManager.shared
     @Environment(\.dismiss) private var dismiss
     
+    @State private var showAlert = false
+    @State private var alertTitle = ""
+    @State private var alertMessage = ""
+    @State private var dismissAfterAlert = false
+    
     var onPurchaseSuccess: () -> Void
     
     var body: some View {
@@ -601,7 +614,6 @@ struct PaywallView: View {
             VStack(spacing: 0) {
                 Spacer()
                 
-                // 庆祝标题
                 VStack(spacing: 16) {
                     Text("🎉")
                         .font(.system(size: 48))
@@ -618,15 +630,13 @@ struct PaywallView: View {
                 
                 Spacer()
                 
-                // 行动号召
                 VStack(spacing: 24) {
                     Text("NOW KEEP IT GOING.")
                         .font(.system(size: 18, weight: .bold, design: .monospaced))
                         .foregroundColor(.white)
                     
-                    // 价格
                     VStack(spacing: 8) {
-                        Text("$4.99")
+                        Text(storeManager.product?.displayPrice ?? "$4.99")
                             .font(.system(size: 48, weight: .bold, design: .monospaced))
                             .foregroundColor(.white)
                         
@@ -638,7 +648,6 @@ struct PaywallView: View {
                 
                 Spacer()
                 
-                // 购买按钮
                 Button(action: purchase) {
                     if storeManager.isLoading {
                         ProgressView()
@@ -658,15 +667,14 @@ struct PaywallView: View {
                 .padding(.horizontal, 24)
                 .disabled(storeManager.isLoading)
                 
-                // 恢复购买
                 Button(action: restore) {
                     Text("RESTORE PURCHASE")
                         .font(.system(size: 11, weight: .medium, design: .monospaced))
                         .foregroundColor(.gray)
                 }
                 .padding(.top, 16)
-                
-                // 关闭按钮
+                .disabled(storeManager.isLoading)
+
                 Button(action: { dismiss() }) {
                     Text("MAYBE LATER")
                         .font(.system(size: 11, weight: .regular, design: .monospaced))
@@ -674,6 +682,22 @@ struct PaywallView: View {
                 }
                 .padding(.top, 12)
                 .padding(.bottom, 40)
+            }
+            .onAppear {
+                if storeManager.product == nil {
+                    Task {
+                        await storeManager.loadProducts()
+                    }
+                }
+            }
+            .alert(alertTitle, isPresented: $showAlert) {
+                Button("OK", role: .cancel) {
+                    if dismissAfterAlert {
+                        dismiss()
+                    }
+                }
+            } message: {
+                Text(alertMessage)
             }
         }
     }
@@ -687,7 +711,10 @@ struct PaywallView: View {
                     onPurchaseSuccess()
                 }
             } catch {
-                print("❌ Purchase failed: \(error)")
+                alertTitle = "PURCHASE FAILED"
+                alertMessage = error.localizedDescription
+                dismissAfterAlert = false
+                showAlert = true
             }
         }
     }
@@ -697,10 +724,16 @@ struct PaywallView: View {
             do {
                 try await storeManager.restorePurchases()
                 if storeManager.purchasedPro {
-                    dismiss()
+                    alertTitle = "RESTORED"
+                    alertMessage = "Your purchase has been restored successfully."
+                    dismissAfterAlert = true
+                    showAlert = true
                 }
             } catch {
-                print("❌ Restore purchase failed: \(error)")
+                alertTitle = "RESTORE FAILED"
+                alertMessage = error.localizedDescription
+                dismissAfterAlert = false
+                showAlert = true
             }
         }
     }
