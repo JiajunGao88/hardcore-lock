@@ -16,11 +16,11 @@
   "products" : [
     {
       "displayPrice" : "2.99",
-      "familyShareable" : false,
-      "internalID" : "F15T33N001",
+      "familyShareable" : true,
+      "internalID" : "6760079784",
       "localizations" : [
         {
-          "description" : "Unlock unlimited app blocking forever.",
+          "description" : "Unlimited app blocking. One-time purchase.",
           "displayName" : "Hardcore Pro",
           "locale" : "en_US"
         }
@@ -38,7 +38,7 @@
     "_developerTeamID" : "CVW2W73M79",
     "_disableDialogs" : false,
     "_failTransactionsEnabled" : false,
-    "_lastSynchronizedDate" : 793951291.44274104,
+    "_lastSynchronizedDate" : 794808994.25704205,
     "_locale" : "en_US",
     "_renewalBillingIssuesEnabled" : false,
     "_storefront" : "USA",
