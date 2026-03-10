@@ -636,7 +636,7 @@ struct PaywallView: View {
                         .foregroundColor(.white)
                     
                     VStack(spacing: 8) {
-                        Text(storeManager.product?.displayPrice ?? "$4.99")
+                        Text(storeManager.product?.displayPrice ?? "$2.99")
                             .font(.system(size: 48, weight: .bold, design: .monospaced))
                             .foregroundColor(.white)
                         
