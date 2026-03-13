@@ -18,7 +18,13 @@ final class StoreManager: ObservableObject {
     @Published private(set) var completedLockCount: Int = 0
     
     // 免费锁定次数
-    private let freeLockLimit = 1
+    private let freeLockLimit = 3
+
+    var freeLockLimitValue: Int { freeLockLimit }
+    
+    var freeLocksRemaining: Int {
+        max(0, freeLockLimit - completedLockCount)
+    }
     
     private var updateListenerTask: Task<Void, Error>?
     
@@ -152,10 +158,10 @@ final class StoreManager: ObservableObject {
     }
     
     func debugSetLockCompleted() {
-        completedLockCount = 1
-        UserDefaults.standard.set(1, forKey: "completedLockCount")
+        completedLockCount = 3
+        UserDefaults.standard.set(3, forKey: "completedLockCount")
         UserDefaults.standard.synchronize()
-        print("🧪 Set to 1 completed lock (debug mode only)")
+        print("🧪 Set to 3 completed locks (debug mode only)")
     }
     #endif
     

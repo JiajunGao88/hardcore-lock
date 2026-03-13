@@ -201,12 +201,24 @@ struct ContentView: View {
             .padding(.horizontal, 24)
             .disabled(!hasSelectionToBlock)
             .opacity(!hasSelectionToBlock ? 0.5 : 1)
+
+            // 免费次数提示（极简、等宽、灰）
+            Group {
+                if storeManager.purchasedPro {
+                    Text("PRO: UNLIMITED")
+                } else {
+                    Text("FREE LOCKS LEFT: \(storeManager.freeLocksRemaining)/\(storeManager.freeLockLimitValue)")
+                }
+            }
+            .font(.system(size: 10, weight: .regular, design: .monospaced))
+            .foregroundColor(.gray.opacity(0.7))
+            .padding(.top, 10)
             
             // 底部文案
             Text("NO ESCAPE. NO REFUNDS.")
                 .font(.system(size: 10, weight: .regular, design: .monospaced))
                 .foregroundColor(.gray.opacity(0.5))
-                .padding(.top, 16)
+                .padding(.top, 10)
                 .padding(.bottom, 40)
             
             
