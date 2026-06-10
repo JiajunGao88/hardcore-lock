@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		46B721D6FFA8AB991A8E2969 /* ScheduleManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 905AD40F4F36DFCF99A44D89 /* ScheduleManager.swift */; };
 		581194672F52BC39001D097E /* Product.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 581194662F52BC39001D097E /* Product.storekit */; };
 		584CA7BD2F16EF1200251A11 /* Hardcord_Lock_AppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 584CA7BC2F16EF1200251A11 /* Hardcord_Lock_AppApp.swift */; };
 		584CA7BF2F16EF1200251A11 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 584CA7BE2F16EF1200251A11 /* ContentView.swift */; };
@@ -29,6 +30,11 @@
 		584CA8192F16F55F00251A11 /* FamilyControlsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 584CA8182F16F55F00251A11 /* FamilyControlsManager.swift */; };
 		584CA81B2F16F58000251A11 /* LockManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 584CA81A2F16F58000251A11 /* LockManager.swift */; };
 		584CA81D2F16F59B00251A11 /* AppBlocker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 584CA81C2F16F59B00251A11 /* AppBlocker.swift */; };
+		66264691FE7BC95060C40CC0 /* SharedKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36C7677B999A8656E1503E18 /* SharedKit.swift */; };
+		727B3CEAB22ECC3C1092FEF5 /* HabitEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00AE854238E1E600A7F9BBF1 /* HabitEngine.swift */; };
+		AAAF203DDFBC0A429E11D530 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44DACD0786CFDB08511D04E6 /* AppDelegate.swift */; };
+		B4B025B77A0031C3134439E9 /* SharedKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36C7677B999A8656E1503E18 /* SharedKit.swift */; };
+		E9083625FC4561BBA25CE329 /* BlockModesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EA5B887DDBA495B549E500F /* BlockModesView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -78,6 +84,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		00AE854238E1E600A7F9BBF1 /* HabitEngine.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HabitEngine.swift; sourceTree = "<group>"; };
+		36C7677B999A8656E1503E18 /* SharedKit.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharedKit.swift; sourceTree = "<group>"; };
+		44DACD0786CFDB08511D04E6 /* AppDelegate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		581194662F52BC39001D097E /* Product.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = Product.storekit; sourceTree = "<group>"; };
 		584CA7B92F16EF1200251A11 /* Hardcord Lock App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Hardcord Lock App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		584CA7BC2F16EF1200251A11 /* Hardcord_Lock_AppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hardcord_Lock_AppApp.swift; sourceTree = "<group>"; };
@@ -109,6 +118,8 @@
 		584CA8182F16F55F00251A11 /* FamilyControlsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FamilyControlsManager.swift; sourceTree = "<group>"; };
 		584CA81A2F16F58000251A11 /* LockManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LockManager.swift; sourceTree = "<group>"; };
 		584CA81C2F16F59B00251A11 /* AppBlocker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBlocker.swift; sourceTree = "<group>"; };
+		5EA5B887DDBA495B549E500F /* BlockModesView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BlockModesView.swift; sourceTree = "<group>"; };
+		905AD40F4F36DFCF99A44D89 /* ScheduleManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ScheduleManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -195,6 +206,11 @@
 				584CA8182F16F55F00251A11 /* FamilyControlsManager.swift */,
 				584CA81A2F16F58000251A11 /* LockManager.swift */,
 				584CA81C2F16F59B00251A11 /* AppBlocker.swift */,
+				36C7677B999A8656E1503E18 /* SharedKit.swift */,
+				905AD40F4F36DFCF99A44D89 /* ScheduleManager.swift */,
+				00AE854238E1E600A7F9BBF1 /* HabitEngine.swift */,
+				5EA5B887DDBA495B549E500F /* BlockModesView.swift */,
+				44DACD0786CFDB08511D04E6 /* AppDelegate.swift */,
 			);
 			path = "Hardcord Lock App";
 			sourceTree = "<group>";
@@ -453,6 +469,11 @@
 				584CA7BD2F16EF1200251A11 /* Hardcord_Lock_AppApp.swift in Sources */,
 				584CA8172F16F53B00251A11 /* StoreManger.swift in Sources */,
 				584CA8192F16F55F00251A11 /* FamilyControlsManager.swift in Sources */,
+				66264691FE7BC95060C40CC0 /* SharedKit.swift in Sources */,
+				46B721D6FFA8AB991A8E2969 /* ScheduleManager.swift in Sources */,
+				727B3CEAB22ECC3C1092FEF5 /* HabitEngine.swift in Sources */,
+				E9083625FC4561BBA25CE329 /* BlockModesView.swift in Sources */,
+				AAAF203DDFBC0A429E11D530 /* AppDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -478,6 +499,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				584CA7F52F16F12E00251A11 /* DeviceActivityMonitorExtension.swift in Sources */,
+				B4B025B77A0031C3134439E9 /* SharedKit.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -77,13 +77,15 @@ final class LockManager: ObservableObject {
                     totalLockedSeconds += lockedDuration
                     UserDefaults.standard.set(totalLockedSeconds, forKey: "totalLockedSeconds")
                     print("🔓 Detected completed lock, added time: \(lockedDuration) seconds")
-                    
+
                     // 记录完成一次锁定（用于免费试用计数）
                     Task { @MainActor in
                         StoreManager.shared.recordCompletedLock()
                     }
                 }
             }
+            // 解除可能残留的屏蔽（处理跨天/多天锁在进程被杀后扩展未能清除的情况）
+            AppBlocker.shared.stopBlocking()
             // 清理锁定状态
             clearLockState()
         }
@@ -121,7 +123,10 @@ final class LockManager: ObservableObject {
     private func endLock() {
         displayUpdateTimer?.invalidate()
         displayUpdateTimer = nil
-        
+
+        // 立即解除屏蔽（前台结束时不依赖扩展的 intervalDidEnd，后者可能延迟）
+        AppBlocker.shared.stopBlocking()
+
         // 计算实际锁定时间并累加
         if let startTime = lockStartTime, let endTime = lockEndTime {
             // 使用开始时间和结束时间计算实际锁定时长

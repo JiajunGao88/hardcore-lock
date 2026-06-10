@@ -2,6 +2,10 @@
 //  AppBlocker.swift
 //  Hardcord Lock App
 //
+//  Manual ("NOW") and AI-challenge locks. These use the isolated `.manual`
+//  ManagedSettings store so they are never affected by Schedule-mode shields
+//  (which live in their own per-schedule stores) and vice-versa.
+//
 
 import DeviceActivity
 import ManagedSettings
@@ -10,63 +14,67 @@ import Foundation
 
 final class AppBlocker {
     static let shared = AppBlocker()
-    
+
     private let center = DeviceActivityCenter()
-    private let store = ManagedSettingsStore()
-    
+
     private init() {}
-    
-    // MARK: - 开始屏蔽
-    
+
+    // MARK: - Start blocking (manual / AI)
+
     func startBlocking(apps: FamilyActivitySelection, duration: TimeInterval) throws {
-        
+
         let minSeconds: TimeInterval = 15 * 60
         guard duration >= minSeconds else {
             throw AppBlockerError.intervalTooShort(minMinutes: 15)
         }
-        
-        print("🚫 开始屏蔽 Apps...")
-        
-        // 创建活动名称
-        let activityName = DeviceActivityName("HardcoreLock")
-        
-        // 计算结束时间
+
+        print("🚫 Start blocking apps (manual store)...")
+
+        let activityName = DeviceActivityName(ActivityNaming.manual)
+
+        // Persist the selection so the extension can re-assert/clear if needed.
+        SelectionStore.save(apps, forKey: StoreKeys.manualSelection)
+
         let now = Date()
         let endDate = now.addingTimeInterval(duration)
-        
-        // 创建调度
+
         let calendar = Calendar.current
         let startComponents = calendar.dateComponents([.hour, .minute, .second], from: now)
         let endComponents = calendar.dateComponents([.hour, .minute, .second], from: endDate)
-        
+
         let schedule = DeviceActivitySchedule(
             intervalStart: startComponents,
             intervalEnd: endComponents,
             repeats: false
         )
-        
-        // 开始监控
+
+        // NOTE: this time-of-day schedule is only a best-effort backstop for
+        // clearing the shield. For locks that cross midnight or span >24h the
+        // interval is degenerate/unreliable, so REAL enforcement comes from:
+        //   • the shield living on a persistent ManagedSettingsStore (stays applied
+        //     until explicitly cleared), and
+        //   • LockManager's absolute end-time timer (resumed across relaunches), plus
+        //     the foreground/relaunch stale-shield clearing in ContentView/LockManager.
+        // This guarantees we never unlock early; at worst the shield lingers until
+        // the app is next opened.
         try center.startMonitoring(activityName, during: schedule)
-        
-        // 应用屏蔽
-        store.shield.applications = apps.applicationTokens
-        store.shield.applicationCategories = .specific(apps.categoryTokens)
-        store.shield.webDomainCategories = .specific(apps.categoryTokens)
-        
-        print("✅ Apps 已屏蔽，持续 \(Int(duration)) 秒")
+
+        // Apply the shield to the isolated manual store.
+        Shielder.apply(apps, to: Stores.manual())
+
+        print("✅ Apps shielded for \(Int(duration)) seconds")
     }
-    
-    // MARK: - 停止屏蔽（仅供内部使用，不暴露给用户）
-    
+
+    // MARK: - Stop blocking (internal only — no early-unlock UI)
+
     func stopBlocking() {
-        let activityName = DeviceActivityName("HardcoreLock")
+        let activityName = DeviceActivityName(ActivityNaming.manual)
         center.stopMonitoring([activityName])
-        
-        store.shield.applications = nil
-        store.shield.applicationCategories = nil
-        store.shield.webDomainCategories = nil
-        
-        print("🔓 屏蔽已解除")
+        Shielder.clear(Stores.manual())
+        // Also clear the legacy default store, in case a lock from an older
+        // version (which used the default store) is still in flight after upgrade.
+        Shielder.clear(ManagedSettingsStore())
+        print("🔓 Manual shield removed")
     }
 }
 

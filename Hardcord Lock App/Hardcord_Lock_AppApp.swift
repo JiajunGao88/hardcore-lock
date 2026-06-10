@@ -10,6 +10,8 @@ import SwiftData
 
 @main
 struct Hardcord_Lock_AppApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             Item.self,

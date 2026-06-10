@@ -19,6 +19,23 @@ FIFTEEN (Hardcord Lock App) is a focus/digital detox application that uses Apple
 - **Persistence** - Lock survives app termination, phone restarts, and force quits
 - **Total Time Tracking** - Tracks cumulative time spent in focus sessions
 
+### Three Modes (v2.2+)
+The home screen has a **NOW / SCHEDULE / AI** switcher:
+
+- **NOW** — the original one-tap manual lock.
+- **SCHEDULE** — *automatic* recurring blocks. Pick apps, the days of the week,
+  a time window, and a cadence (every week, or *every N weeks*). The block turns
+  on and off by itself in the background, even with the app closed. Overnight
+  windows (e.g. 22:00 → 06:00) are supported.
+- **AI** — *predict & prevent*. The app learns, fully on-device, **when** you
+  reach for your distracting apps, then sends a nudge a few minutes **before**
+  your personal peak window so you can pre-commit to a lock — on your command,
+  never automatically. Acting before the cue is the core of habit change.
+
+> **Privacy:** AI mode never sends usage data anywhere. Apple sandboxes Screen
+> Time usage data on the device; the prediction is a transparent on-device
+> frequency model (no cloud, no external AI calls). Schedule + AI are Pro features.
+
 ### Shield Screen
 - Full-screen black shield when trying to open blocked apps
 - Rotating motivational/taunting messages:
@@ -40,9 +57,15 @@ FIFTEEN (Hardcord Lock App) is a focus/digital detox application that uses Apple
 ```
 Hardcord Lock App/
 ├── Main App
-│   ├── Hardcord_Lock_AppApp.swift    # App entry point
-│   ├── ContentView.swift              # Main UI (home + shield views)
-│   ├── AppBlocker.swift               # Core blocking logic
+│   ├── Hardcord_Lock_AppApp.swift    # App entry point (+ AppDelegate adaptor)
+│   ├── AppDelegate.swift              # AI-nudge notification actions
+│   ├── ContentView.swift              # Main UI (NOW/SCHEDULE/AI switch + shield)
+│   ├── BlockModesView.swift           # Schedule + AI screens
+│   ├── SharedKit.swift                # SHARED w/ extension: App Group, named
+│   │                                  #   stores, models, week-parity, AI stats
+│   ├── ScheduleManager.swift          # Schedule CRUD + DeviceActivity registration
+│   ├── HabitEngine.swift              # AI: learn → predict → nudge → challenge
+│   ├── AppBlocker.swift               # Manual/AI lock (isolated `.manual` store)
 │   ├── LockManager.swift              # Timer & state management
 │   ├── FamilyControlsManager.swift    # Screen Time authorization
 │   ├── StoreManager.swift             # In-App Purchase handling
@@ -67,10 +90,17 @@ Hardcord Lock App/
 
 #### 1. DeviceActivityManager
 - **Type:** Device Activity Monitor Extension
-- **Purpose:** Monitors scheduled activity intervals
-- **Behavior:** 
-  - `intervalDidStart`: Logs when lock session begins
-  - `intervalDidEnd`: Automatically removes all shields when timer expires
+- **Purpose:** Runs blocking + learning in the background (app closed)
+- **Behavior:**
+  - `intervalDidStart`: For a **schedule** window, applies the shield to that
+    schedule's isolated store (after an every-N-weeks parity check). For an **AI**
+    window, marks the day as observed.
+  - `intervalDidEnd`: Clears the relevant store — manual lock, or the schedule
+    whose window just ended (overnight windows clear only on the morning segment).
+    Named stores keep manual / schedule / other locks from clearing each other.
+  - `eventDidReachThreshold`: Records an AI "heavy use" hit for the current
+    time-window into the App Group (the learning signal).
+  - Shares `SharedKit.swift` with the app via the App Group.
 
 #### 2. ShieldConfigurationExtension  
 - **Type:** Shield Configuration Data Source
@@ -171,12 +201,16 @@ if savedEndTime > now {
 <true/>
 <key>aps-environment</key>
 <string>development</string>
+<key>com.apple.security.application-groups</key>
+<array><string>group.com.bluewave.hardcorelock</string></array>
 ```
 
 ### Extensions
 ```xml
 <key>com.apple.developer.family-controls</key>
 <true/>
+<key>com.apple.security.application-groups</key>
+<array><string>group.com.bluewave.hardcorelock</string></array>
 ```
 
 ## 🚀 Setup
@@ -186,7 +220,32 @@ if savedEndTime > now {
 3. Update bundle identifiers and team ID
 4. Request Screen Time API entitlement from Apple (if not already approved)
 5. Configure IAP product in App Store Connect
-6. Build and run on physical device (Screen Time doesn't work in Simulator)
+6. **Register the App Group** (required for Schedule + AI modes — see below)
+7. Build and run on physical device (Screen Time doesn't work in Simulator)
+
+### ⚠️ App Group registration (required for Schedule + AI)
+
+Schedule and AI modes rely on a shared **App Group** so the main app and the
+`DeviceActivityManager` extension can share the selected apps, schedule configs,
+and learned usage stats across processes. The group id is already wired into all
+three targets' entitlements:
+
+```
+group.com.bluewave.hardcorelock
+```
+
+One **out-of-band** step the code can't do for you, before the first device build:
+
+1. Apple Developer portal → **Certificates, Identifiers & Profiles → Identifiers →
+   App Groups** → register `group.com.bluewave.hardcorelock` (once).
+2. Make sure each App ID (main app + both extensions) has that App Group assigned.
+   With **Automatic** signing, Xcode regenerates the provisioning profiles on the
+   next build. If signing fails with *"profile doesn't include the
+   application-groups entitlement"*, assign the group to the App IDs manually,
+   then clean-build.
+
+If the App Group is missing/mismatched, scheduled shields silently never apply
+(the extension's shared `UserDefaults` is nil) — so this step is not optional.
 
 ## ⚠️ Important Notes
 
