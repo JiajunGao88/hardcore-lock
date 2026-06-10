@@ -19,7 +19,7 @@ FIFTEEN (Hardcord Lock App) is a focus/digital detox application that uses Apple
 - **Persistence** - Lock survives app termination, phone restarts, and force quits
 - **Total Time Tracking** - Tracks cumulative time spent in focus sessions
 
-### Three Modes (v2.2+)
+### Three Modes (v3.1+)
 The home screen has a **NOW / SCHEDULE / AI** switcher:
 
 - **NOW** — the original one-tap manual lock.
@@ -188,8 +188,8 @@ if savedEndTime > now {
 
 ## 📋 Requirements
 
-- **iOS 17.5+** (uses latest Screen Time APIs)
-- **Xcode 15.4+**
+- **iOS 26.4+** (minimum deployment target)
+- **Xcode 26.x**
 - **Apple Developer Account** with Screen Time entitlements
 - **App Store Connect** configured for IAP (product ID: `com.hardcorelock.pro`)
 
