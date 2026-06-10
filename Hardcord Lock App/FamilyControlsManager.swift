@@ -43,7 +43,7 @@ final class FamilyControlsManager: ObservableObject {
     
     func checkAuthorizationStatus() {
         switch center.authorizationStatus {
-        case .approved:
+        case .approved, .approvedWithDataAccess:
             isAuthorized = true
             // Cache authorization status
             UserDefaults.standard.set(true, forKey: authorizationKey)
@@ -84,7 +84,7 @@ final class FamilyControlsManager: ObservableObject {
     func refreshAuthorizationStatus() {
         let status = center.authorizationStatus
         switch status {
-        case .approved:
+        case .approved, .approvedWithDataAccess:
             isAuthorized = true
             UserDefaults.standard.set(true, forKey: authorizationKey)
         case .denied:
