@@ -188,7 +188,8 @@ if savedEndTime > now {
 
 ## 📋 Requirements
 
-- **iOS 26.4+** (minimum deployment target)
+- **iOS 18.0+** (supports iOS 18 through the latest 26.x; iOS 26.4-only APIs
+  light up automatically on devices that have them, via availability checks)
 - **Xcode 26.x**
 - **Apple Developer Account** with Screen Time entitlements
 - **App Store Connect** configured for IAP (product ID: `com.hardcorelock.pro`)
