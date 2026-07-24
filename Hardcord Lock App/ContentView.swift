@@ -29,6 +29,9 @@ struct ContentView: View {
     @State private var errorMessage = ""
     @State private var showMinDurationNotice = false
     @State private var minDurationNoticeText = ""
+    /// Fullscreen countdown is the default face of an active lock; the user can
+    /// step out to manage Schedule/AI and come back. Reset when a lock starts.
+    @State private var showFullShield = true
 
     enum PaywallIntent { case manualLock, unlockPro }
 
@@ -54,7 +57,7 @@ struct ContentView: View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            if lockManager.isLocked {
+            if lockManager.isLocked && showFullShield {
                 shieldView
             } else {
                 mainContent
@@ -84,6 +87,12 @@ struct ContentView: View {
         }
         .onChange(of: habitEngine.pendingChallenge) { _, pending in
             if pending { startAIChallenge() }
+        }
+        .onChange(of: lockManager.isLocked) { _, locked in
+            // A newly started lock always opens fullscreen (the ritual); when it
+            // ends, reset so the NEXT lock opens fullscreen too.
+            showFullShield = true
+            if locked { selectedMode = .now }
         }
         .alert("DEV", isPresented: $showDevAlert) {
             Button("OK", role: .cancel) {}
@@ -145,6 +154,63 @@ struct ContentView: View {
     // MARK: - NOW 模式（原手动锁定）
 
     private var nowModeContent: some View {
+        if lockManager.isLocked {
+            return AnyView(lockedNowContent)
+        }
+        return AnyView(idleNowContent)
+    }
+
+    /// NOW tab while a lock is running: the pickers and LOCK button make no
+    /// sense (the manual store is busy), so show a clean countdown card instead.
+    private var lockedNowContent: some View {
+        VStack(spacing: 0) {
+            Spacer()
+
+            VStack(spacing: 14) {
+                Text("LOCK RUNNING")
+                    .font(.system(size: 11, weight: .regular, design: .monospaced))
+                    .foregroundColor(.gray)
+                Text(lockManager.formatTime(lockManager.remainingSeconds))
+                    .font(.system(size: 44, weight: .bold, design: .monospaced))
+                    .foregroundColor(.white)
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
+                if let end = lockManager.lockEndDate {
+                    Text("ENDS AT \(Self.endTimeFormatter.string(from: end).uppercased())")
+                        .font(.system(size: 12, weight: .regular, design: .monospaced))
+                        .foregroundColor(.gray)
+                }
+                Button(action: { showFullShield = true }) {
+                    Text("FULLSCREEN")
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundColor(.gray)
+                        .padding(.horizontal, 16).padding(.vertical, 10)
+                        .overlay(Rectangle().stroke(Color.white.opacity(0.2), lineWidth: 1))
+                }
+                .padding(.top, 6)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 36)
+            .overlay(Rectangle().stroke(Color.white.opacity(0.2), lineWidth: 1))
+            .padding(.horizontal, 24)
+
+            Spacer()
+
+            Text("SCHEDULE & AI STAY AVAILABLE ABOVE")
+                .font(.system(size: 10, weight: .regular, design: .monospaced))
+                .foregroundColor(.gray.opacity(0.5))
+                .padding(.bottom, 30)
+        }
+    }
+
+    private static let endTimeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.timeStyle = .short
+        f.dateStyle = .none
+        return f
+    }()
+
+    private var idleNowContent: some View {
         VStack(spacing: 0) {
             Spacer()
 
@@ -291,6 +357,17 @@ struct ContentView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
             Spacer()
+
+            // Quiet exit: the lock keeps running, but Schedule/AI stay reachable.
+            Button(action: { showFullShield = false }) {
+                Text("MANAGE SCHEDULE & AI →")
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundColor(.gray.opacity(0.7))
+                    .padding(.horizontal, 16).padding(.vertical, 10)
+                    .overlay(Rectangle().stroke(Color.white.opacity(0.15), lineWidth: 1))
+            }
+            .padding(.bottom, 16)
+
             Text("// NO UNLOCK BUTTON")
                 .font(.system(size: 10, weight: .regular, design: .monospaced))
                 .foregroundColor(.gray.opacity(0.3))
@@ -517,7 +594,11 @@ struct ContentView: View {
     private func startAIChallenge() {
         habitEngine.pendingChallenge = false
         // Never let an AI nudge hijack/reset a lock that is already running.
-        guard !lockManager.isLocked else { return }
+        guard !lockManager.isLocked else {
+            errorMessage = "A lock is already running.\nIt ends at \(lockManager.lockEndDate.map { Self.endTimeFormatter.string(from: $0) } ?? "—")."
+            showErrorAlert = true
+            return
+        }
         let sel = habitEngine.watchedSelection
         guard !SelectionStore.isEmpty(sel) else {
             selectedMode = .ai

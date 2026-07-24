@@ -14,6 +14,9 @@ final class LockManager: ObservableObject {
     @Published var isLocked: Bool = false
     @Published var remainingSeconds: Int = 0
     @Published var totalLockedSeconds: Int = 0
+
+    /// When the current lock ends (nil when not locked). For UI display.
+    var lockEndDate: Date? { lockEndTime }
     
     private var timer: Timer?
     private var lockEndTime: Date?
