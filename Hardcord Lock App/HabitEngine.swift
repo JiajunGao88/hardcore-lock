@@ -123,6 +123,13 @@ final class HabitEngine: ObservableObject {
     func refresh() {
         stats = AIStatsStore.load()
         watchedSelection = SelectionStore.load(forKey: StoreKeys.aiSelection) ?? watchedSelection
+        // AI "on" with nothing to watch is a meaningless state (and can linger
+        // from old builds' persisted config) — normalize it to OFF so the toggle
+        // always reflects reality and no slots are ever held for nothing.
+        if config.isEnabled, SelectionStore.isEmpty(watchedSelection) {
+            config.isEnabled = false
+            AIConfigStore.save(config)
+        }
         if config.isEnabled, !SelectionStore.isEmpty(watchedSelection) {
             registerWindows()
             NudgeScheduler.reschedule()
