@@ -217,7 +217,10 @@ struct ScheduleConfig: Codable, Identifiable, Equatable {
     var startMinutes: Int { startHour * 60 + startMinute }
     var endMinutes: Int { endHour * 60 + endMinute }
     /// True when the window wraps past midnight (e.g. 22:00 → 06:00).
-    var isOvernight: Bool { endMinutes <= startMinutes }
+    /// An end of exactly 00:00 means "until midnight" — same-day, no morning half.
+    var isOvernight: Bool { endMinutes <= startMinutes && endMinutes != 0 }
+    /// Ends exactly at midnight → registered as one same-day segment to 23:59:59.
+    var endsAtMidnight: Bool { endMinutes == 0 }
     var coversEveryDay: Bool { Set(weekdays) == Set(1...7) }
 
     /// How many DeviceActivity activities this schedule will register.

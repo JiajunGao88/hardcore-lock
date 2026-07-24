@@ -47,7 +47,7 @@ private struct SectionLabel: View {
     let text: String
     var body: some View {
         Text(text)
-            .font(.system(size: 10, weight: .regular, design: .monospaced))
+            .font(.system(size: 12, weight: .regular, design: .monospaced))
             .foregroundColor(.gray)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -69,32 +69,32 @@ struct TimeWheel: View {
     @Binding var minute: Int
 
     var body: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 8) {
             Text(title)
-                .font(.system(size: 10, weight: .regular, design: .monospaced))
+                .font(.system(size: 11, weight: .regular, design: .monospaced))
                 .foregroundColor(.gray)
-            HStack(spacing: 4) {
+            HStack(spacing: 6) {
                 Picker("", selection: $hour) {
                     ForEach(0..<24, id: \.self) { h in
                         Text(String(format: "%02d", h))
-                            .font(.system(size: 16, weight: .medium, design: .monospaced))
+                            .font(.system(size: 22, weight: .medium, design: .monospaced))
                             .foregroundColor(.white).tag(h)
                     }
                 }
-                .pickerStyle(.wheel).frame(width: 60, height: 96).clipped()
+                .pickerStyle(.wheel).frame(width: 80, height: 150).clipped()
 
                 Text(":")
-                    .font(.system(size: 16, weight: .bold, design: .monospaced))
+                    .font(.system(size: 22, weight: .bold, design: .monospaced))
                     .foregroundColor(.white)
 
                 Picker("", selection: $minute) {
                     ForEach(0..<60, id: \.self) { m in
                         Text(String(format: "%02d", m))
-                            .font(.system(size: 16, weight: .medium, design: .monospaced))
+                            .font(.system(size: 22, weight: .medium, design: .monospaced))
                             .foregroundColor(.white).tag(m)
                     }
                 }
-                .pickerStyle(.wheel).frame(width: 60, height: 96).clipped()
+                .pickerStyle(.wheel).frame(width: 80, height: 150).clipped()
             }
         }
     }
@@ -133,7 +133,7 @@ struct ScheduleModeView: View {
                 VStack(spacing: 12) {
                     if scheduleManager.schedules.isEmpty {
                         Text("No schedules yet.\nCreate one to block apps automatically\nat the times you choose.")
-                            .font(.system(size: 12, design: .monospaced))
+                            .font(.system(size: 14, design: .monospaced))
                             .foregroundColor(.gray)
                             .multilineTextAlignment(.center)
                             .padding(.top, 40)
@@ -165,8 +165,8 @@ struct ScheduleModeView: View {
                 Text(storeManager.scheduleTrialsRemaining > 0
                      ? "FREE TRIAL: \(storeManager.scheduleTrialsRemaining)/\(TrialGate.limit) SCHEDULED SESSIONS LEFT"
                      : "TRIAL USED UP — SCHEDULE MODE IS A PRO FEATURE")
-                    .font(.system(size: 9, design: .monospaced))
-                    .foregroundColor(.gray.opacity(0.6))
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundColor(.gray.opacity(0.7))
             }
         }
         .padding(.bottom, 16)
@@ -185,18 +185,18 @@ struct ScheduleModeView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 8) {
                         Text(config.name.uppercased())
-                            .font(.system(size: 14, weight: .bold, design: .monospaced))
+                            .font(.system(size: 16, weight: .bold, design: .monospaced))
                             .foregroundColor(.white)
                         if scheduleManager.isActiveNow(config) {
                             Text("ACTIVE")
-                                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
                                 .foregroundColor(.black)
-                                .padding(.horizontal, 5).padding(.vertical, 2)
+                                .padding(.horizontal, 6).padding(.vertical, 3)
                                 .background(Color.white)
                         }
                     }
                     Text(scheduleSummary(config))
-                        .font(.system(size: 10, design: .monospaced))
+                        .font(.system(size: 12, design: .monospaced))
                         .foregroundColor(.gray)
                 }
                 Spacer()
@@ -262,10 +262,28 @@ struct ScheduleEditorView: View {
     }
 
     private var isOvernight: Bool {
-        (endHour * 60 + endMinute) <= (startHour * 60 + startMinute)
+        let end = endHour * 60 + endMinute
+        return end <= (startHour * 60 + startMinute) && end != 0
     }
 
-    private var canSave: Bool { appCount > 0 && !weekdays.isEmpty }
+    /// iOS rejects monitoring intervals shorter than 15 minutes — validate here
+    /// so the user gets a clear message instead of a generic system error.
+    private var windowIssue: String? {
+        let start = startHour * 60 + startMinute
+        let end = endHour * 60 + endMinute
+        let minLen = 15
+        if end == 0 {                        // "until midnight" — same-day
+            if 1440 - start < minLen { return "Window must be at least 15 minutes." }
+        } else if end <= start {             // overnight split into two halves
+            if 1440 - start < minLen { return "Overnight start must be 23:45 or earlier (iOS minimum window is 15 min)." }
+            if end < minLen { return "Overnight end must be 00:15 or later (iOS minimum window is 15 min)." }
+        } else if end - start < minLen {
+            return "Window must be at least 15 minutes."
+        }
+        return nil
+    }
+
+    private var canSave: Bool { appCount > 0 && !weekdays.isEmpty && windowIssue == nil }
 
     var body: some View {
         ZStack {
@@ -273,34 +291,34 @@ struct ScheduleEditorView: View {
             ScrollView {
                 VStack(spacing: 24) {
                     Text(existing == nil ? "NEW SCHEDULE" : "EDIT SCHEDULE")
-                        .font(.system(size: 16, weight: .bold, design: .monospaced))
+                        .font(.system(size: 18, weight: .bold, design: .monospaced))
                         .foregroundColor(.white)
                         .padding(.top, 20)
 
                     // Name
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 8) {
                         SectionLabel(text: "NAME")
                         TextField("", text: $name)
-                            .font(.system(size: 16, weight: .medium, design: .monospaced))
+                            .font(.system(size: 17, weight: .medium, design: .monospaced))
                             .foregroundColor(.white)
                             .tint(.white)
-                            .padding(12)
+                            .padding(14)
                             .overlay(Rectangle().stroke(Color.white.opacity(0.2), lineWidth: 1))
                     }
 
                     // Apps
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 8) {
                         SectionLabel(text: "APPS TO BLOCK")
                         Button(action: { showPicker = true }) {
                             HStack {
                                 Text(appCount == 0 ? "None selected" : "\(appCount) selected")
-                                    .font(.system(size: 16, weight: .medium, design: .monospaced))
+                                    .font(.system(size: 17, weight: .medium, design: .monospaced))
                                     .foregroundColor(.white)
                                 Spacer()
                                 Text(">").foregroundColor(.gray)
-                                    .font(.system(size: 18, weight: .bold, design: .monospaced))
+                                    .font(.system(size: 20, weight: .bold, design: .monospaced))
                             }
-                            .padding(12)
+                            .padding(14)
                             .overlay(Rectangle().stroke(Color.white.opacity(0.2), lineWidth: 1))
                         }
                     }
@@ -315,10 +333,10 @@ struct ScheduleEditorView: View {
                                     if on { weekdays.remove(item.weekday) } else { weekdays.insert(item.weekday) }
                                 }) {
                                     Text(item.short)
-                                        .font(.system(size: 12, weight: .bold, design: .monospaced))
+                                        .font(.system(size: 14, weight: .bold, design: .monospaced))
                                         .foregroundColor(on ? .black : .gray)
                                         .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 10)
+                                        .padding(.vertical, 13)
                                         .background(on ? Color.white : Color.clear)
                                         .overlay(Rectangle().stroke(Color.white.opacity(0.2), lineWidth: 1))
                                 }
@@ -338,9 +356,13 @@ struct ScheduleEditorView: View {
                             TimeWheel(title: "TO", hour: $endHour, minute: $endMinute)
                         }
                         .frame(maxWidth: .infinity)
-                        if isOvernight {
+                        if let issue = windowIssue {
+                            Text(issue)
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundColor(.orange.opacity(0.9))
+                        } else if isOvernight {
                             Text("Overnight window — ends next morning.")
-                                .font(.system(size: 9, design: .monospaced))
+                                .font(.system(size: 11, design: .monospaced))
                                 .foregroundColor(.gray)
                         }
                     }
@@ -350,22 +372,22 @@ struct ScheduleEditorView: View {
                         SectionLabel(text: "REPEAT")
                         HStack {
                             Text(everyNWeeks <= 1 ? "Every week" : "Every \(everyNWeeks) weeks")
-                                .font(.system(size: 14, weight: .medium, design: .monospaced))
+                                .font(.system(size: 16, weight: .medium, design: .monospaced))
                                 .foregroundColor(.white)
                             Spacer()
                             Stepper("", value: $everyNWeeks, in: 1...8).labelsHidden().tint(.white)
                         }
-                        .padding(12)
+                        .padding(14)
                         .overlay(Rectangle().stroke(Color.white.opacity(0.2), lineWidth: 1))
                     }
 
                     // Save
                     Button(action: save) {
                         Text("SAVE SCHEDULE")
-                            .font(.system(size: 16, weight: .bold, design: .monospaced))
+                            .font(.system(size: 17, weight: .bold, design: .monospaced))
                             .foregroundColor(.black)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
+                            .padding(.vertical, 18)
                             .background(Color.white)
                     }
                     .disabled(!canSave)
@@ -374,7 +396,7 @@ struct ScheduleEditorView: View {
                     if existing != nil {
                         Button(action: deleteSchedule) {
                             Text("DELETE")
-                                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                                .font(.system(size: 14, weight: .bold, design: .monospaced))
                                 .foregroundColor(.red.opacity(0.8))
                         }
                     }
@@ -390,9 +412,9 @@ struct ScheduleEditorView: View {
     private func quickButton(_ label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(label)
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .font(.system(size: 12, weight: .bold, design: .monospaced))
                 .foregroundColor(.gray)
-                .padding(.horizontal, 12).padding(.vertical, 8)
+                .padding(.horizontal, 14).padding(.vertical, 10)
                 .overlay(Rectangle().stroke(Color.white.opacity(0.2), lineWidth: 1))
         }
     }
@@ -442,12 +464,12 @@ struct AIModeView: View {
         ScrollView {
             VStack(spacing: 20) {
                 // Intro
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 8) {
                     Text("PREDICT & PREVENT")
-                        .font(.system(size: 14, weight: .bold, design: .monospaced))
+                        .font(.system(size: 16, weight: .bold, design: .monospaced))
                         .foregroundColor(.white)
                     Text("We learn when you reach for distracting apps, then nudge you to lock in BEFORE the urge hits. On-device. Private.")
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(.system(size: 13, design: .monospaced))
                         .foregroundColor(.gray)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -456,7 +478,7 @@ struct AIModeView: View {
                 OutlineRow {
                     HStack {
                         Text("AI MODE")
-                            .font(.system(size: 14, weight: .bold, design: .monospaced))
+                            .font(.system(size: 16, weight: .bold, design: .monospaced))
                             .foregroundColor(.white)
                         Spacer()
                         Toggle("", isOn: Binding(
@@ -478,16 +500,16 @@ struct AIModeView: View {
                 }) {
                     OutlineRow {
                         HStack {
-                            VStack(alignment: .leading, spacing: 4) {
+                            VStack(alignment: .leading, spacing: 5) {
                                 Text("APPS TO WATCH")
-                                    .font(.system(size: 10, design: .monospaced)).foregroundColor(.gray)
+                                    .font(.system(size: 12, design: .monospaced)).foregroundColor(.gray)
                                 Text(watchedCount == 0 ? "None selected" : "\(watchedCount) selected")
-                                    .font(.system(size: 16, weight: .medium, design: .monospaced))
+                                    .font(.system(size: 17, weight: .medium, design: .monospaced))
                                     .foregroundColor(.white)
                             }
                             Spacer()
                             Text(">").foregroundColor(.gray)
-                                .font(.system(size: 18, weight: .bold, design: .monospaced))
+                                .font(.system(size: 20, weight: .bold, design: .monospaced))
                         }
                     }
                 }
@@ -508,10 +530,10 @@ struct AIModeView: View {
                     startChallenge()
                 }) {
                     Text("CHALLENGE ME NOW")
-                        .font(.system(size: 16, weight: .bold, design: .monospaced))
+                        .font(.system(size: 17, weight: .bold, design: .monospaced))
                         .foregroundColor(.black)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
+                        .padding(.vertical, 18)
                         .background(Color.white)
                 }
 
@@ -519,8 +541,8 @@ struct AIModeView: View {
                     Text(storeManager.aiTrialsRemaining > 0
                          ? "FREE TRIAL: \(storeManager.aiTrialsRemaining)/\(TrialGate.limit) AI LOCKS LEFT"
                          : "TRIAL USED UP — AI MODE IS A PRO FEATURE")
-                        .font(.system(size: 9, design: .monospaced))
-                        .foregroundColor(.gray.opacity(0.6))
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(.gray.opacity(0.7))
                 }
 
                 #if DEBUG
@@ -554,7 +576,7 @@ struct AIModeView: View {
             } label: {
                 HStack {
                     Text("\(habit.config.leadMinutes) min")
-                        .font(.system(size: 15, weight: .medium, design: .monospaced))
+                        .font(.system(size: 16, weight: .medium, design: .monospaced))
                         .foregroundColor(.white)
                     Spacer()
                     Text("▾").foregroundColor(.gray)
@@ -577,7 +599,7 @@ struct AIModeView: View {
             } label: {
                 HStack {
                     Text(durationLabel(habit.config.lockDurationSeconds))
-                        .font(.system(size: 15, weight: .medium, design: .monospaced))
+                        .font(.system(size: 16, weight: .medium, design: .monospaced))
                         .foregroundColor(.white)
                     Spacer()
                     Text("▾").foregroundColor(.gray)
@@ -599,22 +621,22 @@ struct AIModeView: View {
                     SectionLabel(text: "YOUR HABIT MAP")
                     Spacer()
                     Text("\(habit.daysObserved)d learned")
-                        .font(.system(size: 9, design: .monospaced)).foregroundColor(.gray)
+                        .font(.system(size: 11, design: .monospaced)).foregroundColor(.gray)
                 }
 
                 if habit.isLearning {
                     Text("Learning your habits… need \(habit.config.minObservationDays) days of data. Keep AI mode on.")
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(.system(size: 13, design: .monospaced))
                         .foregroundColor(.gray)
                 } else if let peak = habit.predictedPeakLabel {
                     Text("PEAK: \(peak)")
-                        .font(.system(size: 16, weight: .bold, design: .monospaced))
+                        .font(.system(size: 18, weight: .bold, design: .monospaced))
                         .foregroundColor(.white)
                     Text("You'll be nudged \(habit.config.leadMinutes) min before.")
-                        .font(.system(size: 10, design: .monospaced)).foregroundColor(.gray)
+                        .font(.system(size: 12, design: .monospaced)).foregroundColor(.gray)
                 } else {
                     Text("No strong pattern yet — your usage is fairly even. We'll keep watching.")
-                        .font(.system(size: 11, design: .monospaced)).foregroundColor(.gray)
+                        .font(.system(size: 13, design: .monospaced)).foregroundColor(.gray)
                 }
 
                 histogram
@@ -632,16 +654,16 @@ struct AIModeView: View {
                 VStack(spacing: 4) {
                     RoundedRectangle(cornerRadius: 0)
                         .fill(peak == i ? Color.white : Color.white.opacity(0.3))
-                        .frame(height: max(3, CGFloat(f) * 56))
+                        .frame(height: max(3, CGFloat(f) * 64))
                     // Label every 3rd hour to avoid clutter (6, 9, 12, …).
                     Text(hour % 3 == 0 ? "\(hour)" : " ")
-                        .font(.system(size: 7, design: .monospaced))
+                        .font(.system(size: 9, design: .monospaced))
                         .foregroundColor(.gray)
                 }
                 .frame(maxWidth: .infinity, alignment: .bottom)
             }
         }
-        .frame(height: 80, alignment: .bottom)
+        .frame(height: 92, alignment: .bottom)
     }
 }
 

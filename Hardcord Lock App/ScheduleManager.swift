@@ -95,7 +95,8 @@ final class ScheduleManager: ObservableObject {
             if minutesNow < config.endMinutes, inWindowOnDay(prevDay, morningHalf: true) { return true }
             return false
         } else {
-            guard minutesNow >= config.startMinutes, minutesNow < config.endMinutes else { return false }
+            let endM = config.endsAtMidnight ? 1440 : config.endMinutes
+            guard minutesNow >= config.startMinutes, minutesNow < endM else { return false }
             return inWindowOnDay(wd, morningHalf: false)
         }
     }
@@ -127,6 +128,21 @@ final class ScheduleManager: ObservableObject {
         // (HabitEngine reads the count we write below). This avoids a circular
         // reservation between the two subsystems.
         var available = ActivityBudget.max - ActivityBudget.manualReserve
+
+        // AI registers "everything left", so it may be sitting on the slots a
+        // newly created schedule needs (it grabbed them before the schedule
+        // existed). Priority means AI must yield NOW: stop its windows when the
+        // enabled schedules can't fit in what's free — HabitEngine.refresh()
+        // runs right after us (Automation order) and re-fills what remains.
+        let neededCost = schedules.reduce(0) { sum, c in
+            guard c.isEnabled, !SelectionStore.isEmpty(selection(for: c.id)) else { return sum }
+            return sum + c.activityCount
+        }
+        let aiWindows = center.activities.filter { $0.rawValue.hasPrefix(ActivityNaming.aiWindowPrefix) }
+        if neededCost > available - aiWindows.count, !aiWindows.isEmpty {
+            center.stopMonitoring(aiWindows)
+            AppGroup.defaults.set(0, forKey: StoreKeys.aiActivityCount)
+        }
 
         for config in schedules where config.isEnabled {
             let selection = selection(for: config.id)
@@ -186,11 +202,16 @@ final class ScheduleManager: ObservableObject {
                         end: DateComponents(hour: config.endHour, minute: config.endMinute)
                     ))
                 } else {
+                    // "Until midnight" (end 00:00) is same-day: cap at 23:59:59
+                    // instead of producing a zero-length overnight morning half.
+                    let end = config.endsAtMidnight
+                        ? DateComponents(hour: 23, minute: 59, second: 59)
+                        : DateComponents(hour: config.endHour, minute: config.endMinute)
                     started.append(try start(
                         name: ActivityNaming.schedule(id: config.id, weekday: day, segment: "s"),
                         weekday: day,
                         start: DateComponents(hour: config.startHour, minute: config.startMinute),
-                        end: DateComponents(hour: config.endHour, minute: config.endMinute)
+                        end: end
                     ))
                 }
             }

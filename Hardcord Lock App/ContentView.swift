@@ -412,16 +412,16 @@ struct ContentView: View {
     private func customWheel(title: String, range: Range<Int>, selection: Binding<Int>) -> some View {
         VStack(spacing: 8) {
             Text(title)
-                .font(.system(size: 10, weight: .regular, design: .monospaced))
+                .font(.system(size: 11, weight: .regular, design: .monospaced))
                 .foregroundColor(.gray)
             Picker(title, selection: selection) {
                 ForEach(range, id: \.self) { v in
                     Text("\(v)")
-                        .font(.system(size: 16, weight: .medium, design: .monospaced))
+                        .font(.system(size: 22, weight: .medium, design: .monospaced))
                         .foregroundColor(.white).tag(v)
                 }
             }
-            .pickerStyle(.wheel).frame(height: 120)
+            .pickerStyle(.wheel).frame(height: 150)
         }
     }
 
