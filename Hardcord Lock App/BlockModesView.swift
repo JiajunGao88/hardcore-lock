@@ -148,7 +148,7 @@ struct ScheduleModeView: View {
             }
 
             Button(action: {
-                guard storeManager.purchasedPro else { requestPaywall(); return }
+                guard storeManager.canUseSchedule else { requestPaywall(); return }
                 editing = nil
                 showEditor = true
             }) {
@@ -162,7 +162,9 @@ struct ScheduleModeView: View {
             .padding(.horizontal, 24)
 
             if !storeManager.purchasedPro {
-                Text("SCHEDULE MODE IS A PRO FEATURE")
+                Text(storeManager.scheduleTrialsRemaining > 0
+                     ? "FREE TRIAL: \(storeManager.scheduleTrialsRemaining)/\(TrialGate.limit) SCHEDULED SESSIONS LEFT"
+                     : "TRIAL USED UP — SCHEDULE MODE IS A PRO FEATURE")
                     .font(.system(size: 9, design: .monospaced))
                     .foregroundColor(.gray.opacity(0.6))
             }
@@ -175,7 +177,7 @@ struct ScheduleModeView: View {
 
     private func scheduleRow(_ config: ScheduleConfig) -> some View {
         Button(action: {
-            guard storeManager.purchasedPro else { requestPaywall(); return }
+            guard storeManager.canUseSchedule else { requestPaywall(); return }
             editing = config
             showEditor = true
         }) {
@@ -201,7 +203,7 @@ struct ScheduleModeView: View {
                 Toggle("", isOn: Binding(
                     get: { config.isEnabled },
                     set: { newValue in
-                        if newValue && !storeManager.purchasedPro { requestPaywall(); return }
+                        if newValue && !storeManager.canUseSchedule { requestPaywall(); return }
                         scheduleManager.setEnabled(config.id, newValue)
                     }
                 ))
@@ -460,7 +462,7 @@ struct AIModeView: View {
                         Toggle("", isOn: Binding(
                             get: { habit.config.isEnabled },
                             set: { v in
-                                if v && !storeManager.purchasedPro { requestPaywall(); return }
+                                if v && !storeManager.canUseAI { requestPaywall(); return }
                                 if v && watchedCount == 0 { showPicker = true }
                                 habit.setEnabled(v)
                             }
@@ -501,7 +503,7 @@ struct AIModeView: View {
 
                 // Challenge now
                 Button(action: {
-                    if !storeManager.purchasedPro { requestPaywall(); return }
+                    if !storeManager.canUseAI { requestPaywall(); return }
                     if watchedCount == 0 { showPicker = true; return }
                     startChallenge()
                 }) {
@@ -514,7 +516,9 @@ struct AIModeView: View {
                 }
 
                 if !storeManager.purchasedPro {
-                    Text("AI MODE IS A PRO FEATURE")
+                    Text(storeManager.aiTrialsRemaining > 0
+                         ? "FREE TRIAL: \(storeManager.aiTrialsRemaining)/\(TrialGate.limit) AI LOCKS LEFT"
+                         : "TRIAL USED UP — AI MODE IS A PRO FEATURE")
                         .font(.system(size: 9, design: .monospaced))
                         .foregroundColor(.gray.opacity(0.6))
                 }

@@ -58,6 +58,49 @@ enum StoreKeys {
     /// (so the other can respect the 20-activity system cap).
     static let scheduleActivityCount = "budget.schedule"
     static let aiActivityCount = "budget.ai"
+    /// Free-trial bookkeeping (shared: the monitor extension both reads and
+    /// increments the schedule counter when a scheduled session fires).
+    static let proPurchased = "pro.purchased"
+    static let scheduleTrialCount = "trial.schedule.count"
+    static let aiTrialCount = "trial.ai.count"
+}
+
+// MARK: - Free-trial gate
+
+/// Each mode gets `limit` free uses before Pro is required.
+/// Manual (NOW) locks keep their original counter in the app's own defaults;
+/// Schedule and AI counters live in the App Group so the monitor extension —
+/// which fires scheduled sessions with the app closed — can enforce and count.
+enum TrialGate {
+    static let limit = 3
+
+    static var isPro: Bool { AppGroup.defaults.bool(forKey: StoreKeys.proPurchased) }
+    static func setPro(_ value: Bool) { AppGroup.defaults.set(value, forKey: StoreKeys.proPurchased) }
+
+    static var scheduleUsesRemaining: Int {
+        max(0, limit - AppGroup.defaults.integer(forKey: StoreKeys.scheduleTrialCount))
+    }
+    static var aiUsesRemaining: Int {
+        max(0, limit - AppGroup.defaults.integer(forKey: StoreKeys.aiTrialCount))
+    }
+
+    /// Count one fired scheduled session and remember which day it ran for this
+    /// schedule, so the overnight morning half can verify its evening half was paid.
+    static func recordScheduleUse(scheduleId: String, dayKey: String) {
+        AppGroup.defaults.set(AppGroup.defaults.integer(forKey: StoreKeys.scheduleTrialCount) + 1,
+                              forKey: StoreKeys.scheduleTrialCount)
+        AppGroup.defaults.set(dayKey, forKey: "trial.sch.session.\(scheduleId)")
+    }
+
+    /// The overnight morning ("o1") half is free ONLY when the evening half of the
+    /// same schedule actually ran (and was counted) the previous day.
+    static func overnightContinuationAllowed(scheduleId: String, eveningDayKey: String) -> Bool {
+        AppGroup.defaults.string(forKey: "trial.sch.session.\(scheduleId)") == eveningDayKey
+    }
+    static func recordAIUse() {
+        AppGroup.defaults.set(AppGroup.defaults.integer(forKey: StoreKeys.aiTrialCount) + 1,
+                              forKey: StoreKeys.aiTrialCount)
+    }
 }
 
 /// Apple hard-caps an app + its extensions at 20 monitored activities total.

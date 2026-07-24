@@ -13,7 +13,10 @@ final class FamilyControlsManager: ObservableObject {
     static let shared = FamilyControlsManager()
     
     @Published var isAuthorized: Bool = false
-    @Published var selectedApps: FamilyActivitySelection = FamilyActivitySelection()
+    @Published var selectedApps: FamilyActivitySelection = FamilyActivitySelection() {
+        // 持久化手动模式的选择，重启后不用重新选（didSet 不在 init 赋值时触发）
+        didSet { SelectionStore.save(selectedApps, forKey: StoreKeys.manualSelection) }
+    }
     
     private let center = AuthorizationCenter.shared
     
@@ -21,6 +24,11 @@ final class FamilyControlsManager: ObservableObject {
     private let authorizationKey = "screenTimeAuthorized"
     
     private init() {
+        // 回读上次保存的选择（init 里赋值不触发 didSet，不会造成重复写入）
+        if let saved = SelectionStore.load(forKey: StoreKeys.manualSelection) {
+            selectedApps = saved
+        }
+
         // Read cached authorization state from UserDefaults first
         let cachedAuth = UserDefaults.standard.bool(forKey: authorizationKey)
         

@@ -5,6 +5,7 @@
 
 import SwiftUI
 import FamilyControls
+import UserNotifications
 
 struct ContentView: View {
     @StateObject private var storeManager = StoreManager.shared
@@ -453,6 +454,8 @@ struct ContentView: View {
     // MARK: - Automation refresh
 
     private func refreshAutomation() {
+        // 清掉"锁定完成"通知留下的角标
+        UNUserNotificationCenter.current().setBadgeCount(0)
         // Defensive: if no manual/AI lock is active, make sure no stale manual
         // shield lingers (e.g. from a cross-midnight or multi-day lock whose
         // process was killed before its timer could clear it).
@@ -504,7 +507,9 @@ struct ContentView: View {
     }
 
     private func startLock() {
-        performLock(selection: familyControls.selectedApps, duration: selectedDuration)
+        if performLock(selection: familyControls.selectedApps, duration: selectedDuration) {
+            UserDefaults.standard.set("manual", forKey: "activeLockSource")
+        }
     }
 
     // MARK: - AI challenge flow
@@ -520,11 +525,17 @@ struct ContentView: View {
         }
         let duration = habitEngine.config.lockDurationSeconds
 
+        // AI 模式有自己的 3 次免费试用，与手动锁的次数互相独立
+        guard storeManager.canUseAI else {
+            presentProPaywall()
+            return
+        }
+
         guard familyControls.isAuthorized else {
             Task {
                 do {
                     try await familyControls.requestAuthorization()
-                    if familyControls.isAuthorized { performLock(selection: sel, duration: duration) }
+                    if familyControls.isAuthorized { startAILock(selection: sel, duration: duration) }
                 } catch {
                     errorMessage = "Screen Time access is required.\nPlease enable it in Settings > Screen Time."
                     showErrorAlert = true
@@ -533,23 +544,30 @@ struct ContentView: View {
             return
         }
 
-        guard storeManager.canStartLock else {
-            presentProPaywall()
-            return
+        startAILock(selection: sel, duration: duration)
+    }
+
+    private func startAILock(selection: FamilyActivitySelection, duration: Int) {
+        // 只有锁真正启动成功才消耗试用次数、打上来源标记
+        if performLock(selection: selection, duration: duration) {
+            storeManager.recordAIUse()
+            UserDefaults.standard.set("ai", forKey: "activeLockSource")
         }
-        performLock(selection: sel, duration: duration)
     }
 
     // MARK: - Shared lock starter
 
-    private func performLock(selection: FamilyActivitySelection, duration: Int) {
+    @discardableResult
+    private func performLock(selection: FamilyActivitySelection, duration: Int) -> Bool {
         do {
             try AppBlocker.shared.startBlocking(apps: selection, duration: TimeInterval(duration))
             lockManager.startLock(duration: duration)
+            return true
         } catch {
             errorMessage = "Start lock failed:\n\(error.localizedDescription)"
             showErrorAlert = true
             print("❌ Lock start failed: \(error)")
+            return false
         }
     }
 
@@ -682,8 +700,12 @@ struct PaywallView: View {
                     alertTitle = "RESTORED"
                     alertMessage = "Your purchase has been restored successfully."
                     dismissAfterAlert = true
-                    showAlert = true
+                } else {
+                    alertTitle = "NOTHING TO RESTORE"
+                    alertMessage = "No previous purchase was found for this Apple ID."
+                    dismissAfterAlert = false
                 }
+                showAlert = true
             } catch {
                 alertTitle = "RESTORE FAILED"
                 alertMessage = error.localizedDescription

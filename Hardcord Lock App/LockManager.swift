@@ -227,7 +227,10 @@ final class LockManager: ObservableObject {
     func debugSkipLock() {
         displayUpdateTimer?.invalidate()
         displayUpdateTimer = nil
-        
+
+        // 跳过锁定也要立即解除屏蔽，否则应用会一直锁到原定结束时间
+        AppBlocker.shared.stopBlocking()
+
         // Calculate locked time and add to total
         if let startTime = lockStartTime {
             let lockedDuration = Int(Date().timeIntervalSince(startTime))

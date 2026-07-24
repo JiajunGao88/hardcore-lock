@@ -140,8 +140,10 @@ final class ScheduleManager: ObservableObject {
                 try register(config)
                 available -= cost
                 // If we're inside the window right now, apply the shield immediately
-                // so foreground re-registration never opens a gap.
-                if isActiveNow(config) {
+                // so foreground re-registration never opens a gap. Free users must
+                // still have trial sessions left (the extension counts them at
+                // window start; this path only re-asserts, it never counts).
+                if isActiveNow(config), TrialGate.isPro || TrialGate.scheduleUsesRemaining > 0 {
                     Shielder.apply(selection, to: Stores.schedule(config.id))
                 }
             } catch {

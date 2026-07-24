@@ -82,6 +82,22 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         guard let selection = SelectionStore.load(forKey: StoreKeys.scheduleSelection(parsed.id)),
               !SelectionStore.isEmpty(selection) else { return }
 
+        // Free trial: each fired session costs one use, counted at the session's
+        // start. The overnight morning half ("o1") is a continuation, not a new
+        // session — it is allowed only if its evening half actually ran (was
+        // counted) yesterday, so an exhausted trial can't sneak in via mornings.
+        if !TrialGate.isPro {
+            let now = Date()
+            if parsed.segment == "o1" {
+                let eveningKey = AIStatsStore.dayKey(for: now.addingTimeInterval(-12 * 3600))
+                guard TrialGate.overnightContinuationAllowed(scheduleId: parsed.id,
+                                                             eveningDayKey: eveningKey) else { return }
+            } else {
+                guard TrialGate.scheduleUsesRemaining > 0 else { return }
+                TrialGate.recordScheduleUse(scheduleId: parsed.id, dayKey: AIStatsStore.dayKey(for: now))
+            }
+        }
+
         Shielder.apply(selection, to: Stores.schedule(parsed.id))
     }
 }

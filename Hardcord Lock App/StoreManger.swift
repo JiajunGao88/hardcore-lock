@@ -13,7 +13,9 @@ final class StoreManager: ObservableObject {
     private let productId = "com.hardcorelock.pro"
     
     @Published private(set) var product: Product?
-    @Published private(set) var purchasedPro: Bool = false
+    @Published private(set) var purchasedPro: Bool = false {
+        didSet { TrialGate.setPro(purchasedPro) } // mirror to App Group for the monitor extension
+    }
     @Published private(set) var isLoading: Bool = false
     @Published private(set) var completedLockCount: Int = 0
     
@@ -32,6 +34,8 @@ final class StoreManager: ObservableObject {
         // 从 UserDefaults 读取购买状态和锁定次数
         purchasedPro = UserDefaults.standard.bool(forKey: "purchasedPro")
         completedLockCount = UserDefaults.standard.integer(forKey: "completedLockCount")
+        // didSet 在 init 赋值时不触发，手动镜像一次，保证扩展进程离线也能识别 Pro
+        TrialGate.setPro(purchasedPro)
         
         updateListenerTask = listenForTransactions()
         Task {
@@ -52,8 +56,27 @@ final class StoreManager: ObservableObject {
         return purchasedPro || hasFreeLockRemaining
     }
     
+    // MARK: - Schedule / AI 试用（每模式各 3 次，计数在 App Group，见 TrialGate）
+
+    var scheduleTrialsRemaining: Int { TrialGate.scheduleUsesRemaining }
+    var aiTrialsRemaining: Int { TrialGate.aiUsesRemaining }
+    var canUseSchedule: Bool { purchasedPro || scheduleTrialsRemaining > 0 }
+    var canUseAI: Bool { purchasedPro || aiTrialsRemaining > 0 }
+
+    /// AI 挑战锁开始时消耗一次 AI 试用（Schedule 的消耗在监控扩展里,窗口真正触发时计）
+    func recordAIUse() {
+        guard !purchasedPro else { return }
+        TrialGate.recordAIUse()
+        objectWillChange.send()
+    }
+
     /// 记录完成一次锁定
     func recordCompletedLock() {
+        // AI 挑战锁在开始时已消耗 AI 试用，不占用手动（NOW）免费次数
+        if UserDefaults.standard.string(forKey: "activeLockSource") == "ai" {
+            UserDefaults.standard.removeObject(forKey: "activeLockSource")
+            return
+        }
         completedLockCount += 1
         UserDefaults.standard.set(completedLockCount, forKey: "completedLockCount")
         UserDefaults.standard.synchronize()
@@ -79,6 +102,10 @@ final class StoreManager: ObservableObject {
     // MARK: - Purchase
     
     func purchase() async throws -> Bool {
+        // 商品可能在启动时加载失败（网络波动、协议刚生效等），购买前重试一次
+        if product == nil {
+            await loadProducts()
+        }
         guard let product = product else {
             print("❌ Product not found")
             throw StoreError.productNotFound
@@ -153,8 +180,10 @@ final class StoreManager: ObservableObject {
         completedLockCount = 0
         UserDefaults.standard.set(false, forKey: "purchasedPro")
         UserDefaults.standard.set(0, forKey: "completedLockCount")
+        AppGroup.defaults.removeObject(forKey: StoreKeys.scheduleTrialCount)
+        AppGroup.defaults.removeObject(forKey: StoreKeys.aiTrialCount)
         UserDefaults.standard.synchronize()
-        print("🧪 Purchase and lock count reset (debug mode only)")
+        print("🧪 Purchase, lock count and mode trials reset (debug mode only)")
     }
     
     func debugSetLockCompleted() {

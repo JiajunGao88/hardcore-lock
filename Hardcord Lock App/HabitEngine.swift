@@ -6,7 +6,8 @@
 //
 //   1. LEARN  — monitor the user's watched apps across fixed time windows.
 //               The extension records a "heavy use" hit whenever the user spends
-//               ≥10 min in those apps within a window (DeviceActivityEvent threshold).
+//               ≥AIConfig.thresholdMinutes in those apps within a window
+//               (DeviceActivityEvent threshold).
 //   2. PREDICT— after a few days, the window(s) the user reliably over-uses become
 //               the predicted "peak" (frequency = hits / observed days).
 //   3. INTERVENE — schedule a notification a user-set lead time (10/15 min) BEFORE
