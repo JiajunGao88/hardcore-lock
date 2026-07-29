@@ -51,16 +51,30 @@ class ShieldConfigurationExtension: ShieldConfigurationDataSource {
     
     private func createShieldConfiguration() -> ShieldConfiguration {
         let randomTaunt = tauntingMessages.randomElement() ?? "Stay focused."
-        
+
+        // NOTE on sizing/corners: ShieldConfiguration exposes only background
+        // material/color, icon and three labels — no frame, no cornerRadius.
+        // The shield is rendered by a system process, so its geometry and the
+        // app-switcher card treatment are not ours to set. What we CAN do is
+        // stop flattening it: a fully opaque backgroundColor composites over
+        // backgroundBlurStyle and kills the system material entirely, which is
+        // what made this read as a bare black rectangle. Using a thick dark
+        // material with a near-opaque (not opaque) black lets the system's own
+        // material render — still essentially black, but native-looking.
         return ShieldConfiguration(
-            backgroundBlurStyle: .dark,
-            backgroundColor: .black,
+            backgroundBlurStyle: .systemThickMaterialDark,
+            backgroundColor: UIColor.black.withAlphaComponent(0.9),
             icon: nil,
             title: ShieldConfiguration.Label(
                 text: randomTaunt,
                 color: .white
             ),
-            subtitle: nil,
+            // A second line gives the shield the native title+subtitle rhythm
+            // instead of one lonely string floating in the middle.
+            subtitle: ShieldConfiguration.Label(
+                text: "FIFTEEN · LOCKED",
+                color: UIColor.white.withAlphaComponent(0.45)
+            ),
             primaryButtonLabel: nil,     // 无解锁按钮！
             primaryButtonBackgroundColor: nil,
             secondaryButtonLabel: nil    // 无第二按钮！

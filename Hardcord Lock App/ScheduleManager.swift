@@ -15,6 +15,19 @@ import Combine
 import DeviceActivity
 import FamilyControls
 
+/// What a schedule is doing right now. Replaces a single ambiguous "ACTIVE"
+/// boolean: users read that as "switched on", the code meant "inside its window".
+enum ScheduleStatus: Equatable {
+    /// Switched off by the user.
+    case off
+    /// On and registered, waiting for its next window.
+    case armed
+    /// On and inside its window right now — apps are shielded.
+    case blocking
+    /// On, but it cannot block; the string is the user-facing reason.
+    case paused(String)
+}
+
 @MainActor
 final class ScheduleManager: ObservableObject {
     static let shared = ScheduleManager()
@@ -101,8 +114,22 @@ final class ScheduleManager: ObservableObject {
         }
     }
 
-    var hasActiveScheduleNow: Bool {
-        schedules.contains { isActiveNow($0) }
+    // MARK: - Status (what the row badge shows)
+
+    /// Ground truth for one schedule, so the badge can never claim a schedule is
+    /// blocking when it demonstrably isn't. `isActiveNow` alone was ambiguous:
+    /// it means "inside its clock window", which users read as "switched on".
+    func status(_ config: ScheduleConfig, now: Date = Date()) -> ScheduleStatus {
+        guard config.isEnabled else { return .off }
+        if SelectionStore.isEmpty(selection(for: config.id)) { return .paused("NO APPS") }
+        if !TrialGate.isPro, TrialGate.scheduleUsesRemaining == 0 { return .paused("TRIAL USED UP") }
+        // Enabled but iOS never accepted its monitors (20-activity cap) → it
+        // will not fire, so saying "armed" would be a lie.
+        let registered = center.activities.contains {
+            ActivityNaming.parseSchedule($0.rawValue)?.id == config.id
+        }
+        if !registered { return .paused("iOS LIMIT") }
+        return isActiveNow(config, now: now) ? .blocking : .armed
     }
 
     // MARK: - Reconcile DeviceActivity monitors

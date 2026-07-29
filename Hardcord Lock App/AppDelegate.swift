@@ -54,13 +54,16 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 
         if category == HabitEngine.categoryIdentifier {
             switch action {
-            case HabitEngine.actionLockNow, UNNotificationDefaultActionIdentifier:
-                // The user opted in → start the challenge once the app is active.
+            case HabitEngine.actionLockNow:
+                // ONLY the explicit "LOCK NOW" action starts a lock. Merely
+                // tapping the banner (UNNotificationDefaultActionIdentifier)
+                // must just open the app — locking someone for hours because
+                // they glanced at a notification is not consent.
                 Task { @MainActor in
                     HabitEngine.shared.requestChallenge()
                 }
             default:
-                break // "Not today" / dismiss → do nothing.
+                break // Banner tap / "Not today" / dismiss → just open the app.
             }
         }
         completionHandler()

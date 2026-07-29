@@ -159,6 +159,15 @@ final class HabitEngine: ObservableObject {
         let available = max(0, ActivityBudget.max - ActivityBudget.manualReserve - scheduleCount)
         let n = min(available, AIConfig.maxWindows)
 
+        // Derive the warning from `n` BEFORE the no-op fast path below, so a
+        // reconcile that changes nothing still reproduces it (it is surfaced in
+        // the AI screen and must not blink out on every foreground).
+        if n <= 0 {
+            lastBudgetWarning = "AI is paused — your schedules are using all \(ActivityBudget.max) background-timer slots. Disable a schedule to free one."
+        } else if n < AIConfig.maxWindows {
+            lastBudgetWarning = "AI is covering the day in \(n) wider blocks (schedules are using some of the \(ActivityBudget.max) slots). Fewer schedules = finer learning."
+        }
+
         // Skip a needless restart only when nothing changed (same apps AND same
         // window count). If the budget shifted, n changes and we re-register.
         let liveWindows = center.activities.filter { $0.rawValue.hasPrefix(ActivityNaming.aiWindowPrefix) }.count
@@ -166,13 +175,7 @@ final class HabitEngine: ObservableObject {
 
         stopWindows()
 
-        guard n > 0 else {
-            lastBudgetWarning = "AI is paused — your schedules are using all \(ActivityBudget.max) background-timer slots. Disable a schedule to free one."
-            return
-        }
-        if n < AIConfig.maxWindows {
-            lastBudgetWarning = "AI is covering the day in \(n) wider blocks (schedules are using some of the \(ActivityBudget.max) slots). Fewer schedules = finer learning."
-        }
+        guard n > 0 else { return }
 
         let event = DeviceActivityEvent(
             applications: watchedSelection.applicationTokens,
@@ -217,7 +220,8 @@ final class HabitEngine: ObservableObject {
 
     // MARK: - Challenge trigger
 
-    /// Called from the AI UI ("challenge me now") or from an accepted nudge action.
+    /// Called only when the user explicitly accepts a pre-cue nudge by tapping
+    /// its "LOCK NOW" action. There is no in-app one-tap lock button by design.
     func requestChallenge() {
         pendingChallenge = true
     }

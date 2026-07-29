@@ -62,6 +62,38 @@ private struct OutlineRow<Content: View>: View {
     }
 }
 
+/// One-glance state for a schedule row. Only BLOCKING NOW gets the solid white
+/// treatment — everything else stays quiet so a list of schedules reads calmly.
+private struct ScheduleStatusBadge: View {
+    let status: ScheduleStatus
+
+    var body: some View {
+        switch status {
+        case .off:
+            EmptyView()
+        case .armed:
+            chip("ARMED", color: .white.opacity(0.55), filled: false)
+        case .blocking:
+            chip("BLOCKING NOW", color: .white, filled: true)
+        case .paused(let reason):
+            chip("PAUSED · \(reason)", color: .orange.opacity(0.9), filled: false)
+        }
+    }
+
+    private func chip(_ text: String, color: Color, filled: Bool) -> some View {
+        Text(text)
+            .font(.system(size: 9, weight: .bold, design: .monospaced))
+            .foregroundColor(filled ? .black : color)
+            .padding(.horizontal, 6).padding(.vertical, 3)
+            .background(filled ? color : Color.clear)
+            .overlay(
+                Group {
+                    if !filled { Rectangle().stroke(color.opacity(0.5), lineWidth: 1) }
+                }
+            )
+    }
+}
+
 /// A compact hour/minute wheel matching the existing duration picker style.
 struct TimeWheel: View {
     let title: String
@@ -111,6 +143,12 @@ struct ScheduleModeView: View {
 
     @State private var editing: ScheduleConfig?
     @State private var showEditor = false
+
+    /// A schedule's status depends on the wall clock, but SwiftUI only re-renders
+    /// on published changes — without this tick a window opening while the screen
+    /// is up would never light up. 30s is enough: windows are minute-aligned.
+    @State private var now = Date()
+    private let clock = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
     var body: some View {
         VStack(spacing: 16) {
@@ -170,6 +208,8 @@ struct ScheduleModeView: View {
             }
         }
         .padding(.bottom, 16)
+        .onAppear { now = Date() }
+        .onReceive(clock) { now = $0 }
         .sheet(isPresented: $showEditor) {
             ScheduleEditorView(existing: editing)
         }
@@ -187,13 +227,7 @@ struct ScheduleModeView: View {
                         Text(config.name.uppercased())
                             .font(.system(size: 16, weight: .bold, design: .monospaced))
                             .foregroundColor(.white)
-                        if scheduleManager.isActiveNow(config) {
-                            Text("ACTIVE")
-                                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                                .foregroundColor(.black)
-                                .padding(.horizontal, 6).padding(.vertical, 3)
-                                .background(Color.white)
-                        }
+                        ScheduleStatusBadge(status: scheduleManager.status(config, now: now))
                     }
                     Text(scheduleSummary(config))
                         .font(.system(size: 12, design: .monospaced))
@@ -428,7 +462,8 @@ struct ScheduleEditorView: View {
         cfg.endHour = endHour
         cfg.endMinute = endMinute
         cfg.everyNWeeks = everyNWeeks
-        cfg.isEnabled = true
+        // Editing must not silently switch a schedule the user turned off back on.
+        cfg.isEnabled = existing?.isEnabled ?? true
         if existing == nil || cfg.anchorEpoch == 0 {
             cfg.anchorEpoch = Date().timeIntervalSince1970
         }
@@ -449,8 +484,6 @@ struct AIModeView: View {
     @ObservedObject var storeManager = StoreManager.shared
 
     var requestPaywall: () -> Void
-    /// Start a challenge lock now (handled by ContentView so paywall/free logic applies).
-    var startChallenge: () -> Void
 
     @State private var showPicker = false
     @State private var localSelection = HabitEngine.shared.watchedSelection
@@ -523,18 +556,28 @@ struct AIModeView: View {
                 // Insight panel
                 insightPanel
 
-                // Challenge now
-                Button(action: {
-                    if !storeManager.canUseAI { requestPaywall(); return }
-                    if watchedCount == 0 { showPicker = true; return }
-                    startChallenge()
-                }) {
-                    Text("CHALLENGE ME NOW")
-                        .font(.system(size: 17, weight: .bold, design: .monospaced))
-                        .foregroundColor(.black)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 18)
-                        .background(Color.white)
+                if let warning = habit.lastBudgetWarning {
+                    Text(warning)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(.orange.opacity(0.9))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                // A lock is only ever started by the user accepting a nudge —
+                // there is deliberately no button here that locks on one tap.
+                OutlineRow {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("NEXT NUDGE")
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundColor(.gray)
+                        Text(nudgeLabel)
+                            .font(.system(size: 16, weight: .medium, design: .monospaced))
+                            .foregroundColor(.white)
+                        Text("Tap LOCK NOW on that notification to start a \(durationLabel(habit.config.lockDurationSeconds)) lock. Nothing here locks you on its own.")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundColor(.gray)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
                 if !storeManager.purchasedPro {
@@ -612,6 +655,16 @@ struct AIModeView: View {
 
     private func durationLabel(_ s: Int) -> String {
         s % 3600 == 0 ? "\(s / 3600)h" : "\(s / 60)m"
+    }
+
+    /// When the daily pre-cue will fire, mirroring NudgeScheduler's own math.
+    private var nudgeLabel: String {
+        guard habit.config.isEnabled else { return "AI mode is off" }
+        guard watchedCount > 0 else { return "Pick apps to watch first" }
+        let peak = habit.predictedPeakMinute
+            ?? habit.predictedPeakIndex.map { AIConfig.displayBinStartHour($0) * 60 }
+        guard let target = peak else { return "Still learning — no nudge yet" }
+        return "\(AIConfig.minuteLabel(max(0, target - habit.config.leadMinutes))) daily"
     }
 
     private var insightPanel: some View {

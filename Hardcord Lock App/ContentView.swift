@@ -81,9 +81,16 @@ struct ContentView: View {
                 requestAuthorization()
             }
             refreshAutomation()
+            // The nudge is now the ONLY way an AI lock starts, so a request that
+            // arrived before this view existed (cold launch from the notification)
+            // must be drained here — .onChange never fires for it.
+            if habitEngine.pendingChallenge { startAIChallenge() }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { refreshAutomation() }
+            if phase == .active {
+                refreshAutomation()
+                if habitEngine.pendingChallenge { startAIChallenge() }
+            }
         }
         .onChange(of: habitEngine.pendingChallenge) { _, pending in
             if pending { startAIChallenge() }
@@ -120,10 +127,7 @@ struct ContentView: View {
             case .schedule:
                 ScheduleModeView(requestPaywall: { presentProPaywall() })
             case .ai:
-                AIModeView(
-                    requestPaywall: { presentProPaywall() },
-                    startChallenge: { startAIChallenge() }
-                )
+                AIModeView(requestPaywall: { presentProPaywall() })
             }
         }
     }

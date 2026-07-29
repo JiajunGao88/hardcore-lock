@@ -252,11 +252,12 @@ enum ScheduleStore {
 enum WeekParity {
     /// True if `date` falls in an "on" week relative to the schedule's anchor.
     /// Weekly (N<=1) is always on. The morning half of an overnight window is
-    /// shifted back ~12h so it is attributed to the prior evening's week.
+    /// shifted back a full day so it is always attributed to the prior evening's
+    /// week (a 12h shift lands on the wrong day for windows ending after noon).
     static func isActiveWeek(_ config: ScheduleConfig, on date: Date, morningHalf: Bool = false) -> Bool {
         guard config.everyNWeeks > 1 else { return true }
         let cal = Calendar.current
-        let evalDate = morningHalf ? date.addingTimeInterval(-12 * 3600) : date
+        let evalDate = morningHalf ? date.addingTimeInterval(-24 * 3600) : date
         let anchor = Date(timeIntervalSince1970: config.anchorEpoch)
 
         guard let anchorWeek = cal.dateInterval(of: .weekOfYear, for: anchor)?.start,
