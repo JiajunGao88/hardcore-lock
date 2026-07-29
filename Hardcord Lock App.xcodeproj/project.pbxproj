@@ -7,8 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		3842E4FD22976B56C1200399 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 16AB89BB0C9FE5AFC0F414AB /* PrivacyInfo.xcprivacy */; };
 		46B721D6FFA8AB991A8E2969 /* ScheduleManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 905AD40F4F36DFCF99A44D89 /* ScheduleManager.swift */; };
-		581194672F52BC39001D097E /* Product.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 581194662F52BC39001D097E /* Product.storekit */; };
 		584CA7BD2F16EF1200251A11 /* Hardcord_Lock_AppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 584CA7BC2F16EF1200251A11 /* Hardcord_Lock_AppApp.swift */; };
 		584CA7BF2F16EF1200251A11 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 584CA7BE2F16EF1200251A11 /* ContentView.swift */; };
 		584CA7C12F16EF1200251A11 /* Item.swift in Sources */ = {isa = PBXBuildFile; fileRef = 584CA7C02F16EF1200251A11 /* Item.swift */; };
@@ -30,6 +30,7 @@
 		584CA8192F16F55F00251A11 /* FamilyControlsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 584CA8182F16F55F00251A11 /* FamilyControlsManager.swift */; };
 		584CA81B2F16F58000251A11 /* LockManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 584CA81A2F16F58000251A11 /* LockManager.swift */; };
 		584CA81D2F16F59B00251A11 /* AppBlocker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 584CA81C2F16F59B00251A11 /* AppBlocker.swift */; };
+		65152A726F39944984185CDE /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 16AB89BB0C9FE5AFC0F414AB /* PrivacyInfo.xcprivacy */; };
 		66264691FE7BC95060C40CC0 /* SharedKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36C7677B999A8656E1503E18 /* SharedKit.swift */; };
 		727B3CEAB22ECC3C1092FEF5 /* HabitEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00AE854238E1E600A7F9BBF1 /* HabitEngine.swift */; };
 		AAAF203DDFBC0A429E11D530 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44DACD0786CFDB08511D04E6 /* AppDelegate.swift */; };
@@ -85,6 +86,7 @@
 
 /* Begin PBXFileReference section */
 		00AE854238E1E600A7F9BBF1 /* HabitEngine.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HabitEngine.swift; sourceTree = "<group>"; };
+		16AB89BB0C9FE5AFC0F414AB /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		36C7677B999A8656E1503E18 /* SharedKit.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharedKit.swift; sourceTree = "<group>"; };
 		44DACD0786CFDB08511D04E6 /* AppDelegate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		581194662F52BC39001D097E /* Product.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = Product.storekit; sourceTree = "<group>"; };
@@ -177,6 +179,7 @@
 				584CA8082F16F1B100251A11 /* ShieldConfigurationExtension */,
 				584CA7BA2F16EF1200251A11 /* Products */,
 				584CA7E92F16F0B300251A11 /* Frameworks */,
+				16AB89BB0C9FE5AFC0F414AB /* PrivacyInfo.xcprivacy */,
 			);
 			sourceTree = "<group>";
 		};
@@ -423,7 +426,7 @@
 			files = (
 				584CA7C62F16EF1500251A11 /* Preview Assets.xcassets in Resources */,
 				584CA7C32F16EF1500251A11 /* Assets.xcassets in Resources */,
-				581194672F52BC39001D097E /* Product.storekit in Resources */,
+				3842E4FD22976B56C1200399 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -445,6 +448,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				65152A726F39944984185CDE /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

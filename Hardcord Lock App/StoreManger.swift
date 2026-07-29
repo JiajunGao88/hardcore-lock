@@ -207,10 +207,30 @@ final class StoreManager: ObservableObject {
             for await result in Transaction.updates {
                 if case .verified(let transaction) = result {
                     await transaction.finish()
-                    await self.updatePurchaseStatus()
+                    // A refund/revocation arrives here too. updatePurchaseStatus
+                    // only ever grants Pro, so without this a refunded user would
+                    // keep Pro forever. Revoke explicitly rather than inferring it
+                    // from an empty entitlement list, which would also strip Pro
+                    // from a legitimate owner whose entitlements failed to load.
+                    if transaction.productID == self.productIdValue, transaction.revocationDate != nil {
+                        await self.revokePro()
+                    } else {
+                        await self.updatePurchaseStatus()
+                    }
                 }
             }
         }
+    }
+
+    /// Product id readable from the detached transaction listener.
+    nonisolated var productIdValue: String { "com.hardcorelock.pro" }
+
+    private func revokePro() {
+        guard purchasedPro else { return }
+        purchasedPro = false
+        UserDefaults.standard.set(false, forKey: "purchasedPro")
+        Automation.reconcileAll()
+        print("↩️ Pro revoked (refund)")
     }
     
     // MARK: - 验证

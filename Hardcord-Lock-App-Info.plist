@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>NSFamilyControlsUsageDescription</key>
-	<string>Hardcore Lock needs Screen Time access to block apps during your focus sessions.</string>
+	<string>Fifteen needs Screen Time access to block the apps you choose during your focus sessions.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 </dict>
