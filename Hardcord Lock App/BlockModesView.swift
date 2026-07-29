@@ -497,6 +497,7 @@ struct ScheduleEditorView: View {
 struct AIModeView: View {
     @ObservedObject var habit = HabitEngine.shared
     @ObservedObject var storeManager = StoreManager.shared
+    @Environment(\.scenePhase) private var scenePhase
 
     var requestPaywall: () -> Void
 
@@ -505,9 +506,12 @@ struct AIModeView: View {
     /// The toggle was flipped on before any app was chosen; finish the job once
     /// the picker comes back with a selection.
     @State private var enableAfterPicking = false
-    /// The nudge is the ONLY way an AI lock starts, so denied notifications
+    /// The nudge is the ONLY way an AI lock starts, so DENIED notifications
     /// silently make the whole mode inert — say so instead of promising a nudge.
-    @State private var notificationsAllowed = true
+    /// `.notDetermined` is not a failure: we simply haven't asked yet (enabling
+    /// AI mode asks), so it must not show the "fix this in Settings" message.
+    @State private var notifStatus: UNAuthorizationStatus = .authorized
+    private var notificationsBlocked: Bool { notifStatus == .denied }
 
     private var watchedCount: Int {
         let s = habit.watchedSelection
@@ -605,7 +609,7 @@ struct AIModeView: View {
                             .foregroundColor(.white)
                         Text(nudgeCaption)
                             .font(.system(size: 11, design: .monospaced))
-                            .foregroundColor(notificationsAllowed ? .gray : .orange.opacity(0.9))
+                            .foregroundColor(notificationsBlocked ? .orange.opacity(0.9) : .gray)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -644,6 +648,14 @@ struct AIModeView: View {
             }
         }
         .task { await refreshNotificationStatus() }
+        // Re-read after the user grants (or denies) permission — either in our
+        // own prompt when AI mode is switched on, or over in Settings.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await refreshNotificationStatus() } }
+        }
+        .onChange(of: habit.config.isEnabled) { _, _ in
+            Task { await refreshNotificationStatus() }
+        }
     }
 
     private var leadTimePicker: some View {
@@ -700,7 +712,7 @@ struct AIModeView: View {
     private var nudgeLabel: String {
         guard habit.config.isEnabled else { return "AI mode is off" }
         guard watchedCount > 0 else { return "Pick apps to watch first" }
-        guard notificationsAllowed else { return "Notifications are off" }
+        guard !notificationsBlocked else { return "Notifications are off" }
         let peak = habit.predictedPeakMinute
             ?? habit.predictedPeakIndex.map { AIConfig.displayBinStartHour($0) * 60 }
         guard let target = peak else { return "Still learning — no nudge yet" }
@@ -710,15 +722,14 @@ struct AIModeView: View {
 
     /// Explains the state above, so the panel is never just a dead end.
     private var nudgeCaption: String {
-        if !notificationsAllowed {
+        if notificationsBlocked {
             return "AI mode nudges you through a notification, so it can't do anything until you allow notifications for FIFTEEN in Settings."
         }
         return "Tap LOCK NOW on that notification to start a \(durationLabel(habit.config.lockDurationSeconds)) lock. Nothing here locks you on its own."
     }
 
     private func refreshNotificationStatus() async {
-        let status = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
-        notificationsAllowed = (status == .authorized || status == .provisional || status == .ephemeral)
+        notifStatus = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
     }
 
     private var insightPanel: some View {

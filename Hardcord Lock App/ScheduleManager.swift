@@ -46,6 +46,13 @@ final class ScheduleManager: ObservableObject {
 
     private init() {
         schedules = ScheduleStore.load()
+        // Seed the snapshots from reality. Left empty, any row rendered before
+        // the first reconcile would claim "PAUSED · iOS LIMIT" — monitors from
+        // the previous launch are still registered, so ask.
+        registeredScheduleIds = Set(center.activities.compactMap {
+            ActivityNaming.parseSchedule($0.rawValue)?.id
+        })
+        emptySelectionIds = Set(schedules.filter { SelectionStore.isEmpty(selection(for: $0.id)) }.map(\.id))
     }
 
     // MARK: - Selection access (stored per schedule in the App Group)
@@ -132,13 +139,15 @@ final class ScheduleManager: ObservableObject {
         // will not fire, so saying "armed" would be a lie.
         if !registeredScheduleIds.contains(config.id) { return .paused("iOS LIMIT") }
 
-        let blocking = isActiveNow(config, now: now)
-        // A session already charged today stays entitled even at zero balance —
-        // never tell a user their running block is paused.
-        if !TrialGate.sessionEntitled(scheduleId: config.id, now: now) {
-            return .paused("TRIAL USED UP")
+        if isActiveNow(config, now: now) {
+            // A session already charged stays entitled even at zero balance —
+            // never tell a user their running block is paused.
+            return TrialGate.sessionEntitled(config, now: now) ? .blocking : .paused("TRIAL USED UP")
         }
-        return blocking ? .blocking : .armed
+        // Between windows the question is different: can it fire NEXT time? With
+        // the balance spent it cannot, so "armed" would be a promise we can't keep.
+        if !TrialGate.isPro, TrialGate.scheduleUsesRemaining == 0 { return .paused("TRIAL USED UP") }
+        return .armed
     }
 
     // MARK: - Reconcile DeviceActivity monitors
@@ -195,7 +204,7 @@ final class ScheduleManager: ObservableObject {
                 // so foreground re-registration never opens a gap. Free users must
                 // still have trial sessions left (the extension counts them at
                 // window start; this path only re-asserts, it never counts).
-                if isActiveNow(config), TrialGate.sessionEntitled(scheduleId: config.id, now: Date()) {
+                if isActiveNow(config), TrialGate.sessionEntitled(config, now: Date()) {
                     Shielder.apply(selection, to: Stores.schedule(config.id))
                 }
             } catch {

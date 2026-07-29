@@ -30,8 +30,12 @@ import UserNotifications
 enum AppGroup {
     static let id = "group.com.bluewave.hardcorelock"
 
+    /// Resolved once: `defaults` is read on hot paths (including a SwiftUI body),
+    /// so don't re-resolve the suite on every access.
+    private static let suite: UserDefaults? = UserDefaults(suiteName: id)
+
     static var defaults: UserDefaults {
-        if let d = UserDefaults(suiteName: id) { return d }
+        if let d = suite { return d }
         #if DEBUG
         assertionFailure("App Group \(id) is not configured. Add it to all target entitlements.")
         #endif
@@ -103,15 +107,20 @@ enum TrialGate {
         AppGroup.defaults.string(forKey: sessionKey(scheduleId)) == dayKey
     }
 
-    /// A session already paid for today (or yesterday, for the morning half of an
-    /// overnight window) stays entitled even once the balance hits zero — running
-    /// sessions must never be evicted mid-flight.
-    static func sessionEntitled(scheduleId: String, now: Date) -> Bool {
+    /// A session already charged stays entitled even once the balance hits zero —
+    /// a running block must never be evicted mid-flight.
+    ///
+    /// Yesterday's charge counts ONLY for the morning half of an overnight
+    /// window, which is a continuation of last night's paid session. Accepting
+    /// it unconditionally would hand every schedule a free extra day: with the
+    /// balance at 0 and a stamp from yesterday, the app would re-apply the
+    /// shield today for nothing.
+    static func sessionEntitled(_ config: ScheduleConfig, now: Date) -> Bool {
         if isPro || scheduleUsesRemaining > 0 { return true }
-        let cal = Calendar.current
-        let yesterday = cal.date(byAdding: .day, value: -1, to: now) ?? now
-        return sessionCounted(scheduleId: scheduleId, dayKey: AIStatsStore.dayKey(for: now))
-            || sessionCounted(scheduleId: scheduleId, dayKey: AIStatsStore.dayKey(for: yesterday))
+        if sessionCounted(scheduleId: config.id, dayKey: AIStatsStore.dayKey(for: now)) { return true }
+        guard config.isOvernight, AIStatsStore.minuteOfDay(for: now) < config.endMinutes else { return false }
+        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: now) ?? now
+        return sessionCounted(scheduleId: config.id, dayKey: AIStatsStore.dayKey(for: yesterday))
     }
     static func recordAIUse() {
         AppGroup.defaults.set(AppGroup.defaults.integer(forKey: StoreKeys.aiTrialCount) + 1,

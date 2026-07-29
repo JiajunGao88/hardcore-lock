@@ -154,8 +154,13 @@ final class StoreManager: ObservableObject {
         for await result in Transaction.currentEntitlements {
             if case .verified(let transaction) = result {
                 if transaction.productID == productId {
+                    let wasPro = purchasedPro
                     purchasedPro = true
                     UserDefaults.standard.set(true, forKey: "purchasedPro")
+                    // Becoming Pro lifts the trial gates, but nothing re-applies
+                    // the shields those gates were suppressing — reconcile so an
+                    // open schedule window starts blocking immediately.
+                    if !wasPro { Automation.reconcileAll() }
                     print("✅ Pro purchased")
                     return
                 }
@@ -172,6 +177,7 @@ final class StoreManager: ObservableObject {
         purchasedPro = true
         UserDefaults.standard.set(true, forKey: "purchasedPro")
         UserDefaults.standard.synchronize()
+        Automation.reconcileAll()
         print("🧪 Simulated purchase (debug mode only)")
     }
     

@@ -556,7 +556,9 @@ struct ContentView: View {
     private func handlePaywallSuccess() {
         switch paywallIntent {
         case .manualLock: startLock()
-        case .unlockPro: break // Feature unlocked; user can proceed.
+        // Feature unlocked — re-run automation so schedules/AI that the trial
+        // gates were holding back take effect without waiting for a foreground.
+        case .unlockPro: refreshAutomation()
         }
     }
 
