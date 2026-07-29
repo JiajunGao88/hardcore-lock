@@ -86,25 +86,9 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         // start. The overnight morning half ("o1") is a continuation, not a new
         // session — it is allowed only if its evening half actually ran (was
         // counted) yesterday, so an exhausted trial can't sneak in via mornings.
-        if !TrialGate.isPro {
-            let now = Date()
-            let cal = Calendar.current
-            let todayKey = AIStatsStore.dayKey(for: now)
-            let eveningKey = AIStatsStore.dayKey(for: cal.date(byAdding: .day, value: -1, to: now) ?? now)
-
-            if parsed.segment == "o1" {
-                // Morning half: a free continuation, but only if last night's
-                // evening half actually ran and was charged.
-                guard TrialGate.sessionCounted(scheduleId: parsed.id, dayKey: eveningKey) else { return }
-            } else if !TrialGate.sessionCounted(scheduleId: parsed.id, dayKey: todayKey) {
-                // First fire today → charge one session.
-                guard TrialGate.scheduleUsesRemaining > 0 else { return }
-                TrialGate.recordScheduleUse(scheduleId: parsed.id, dayKey: todayKey)
-            }
-            // Already charged today → this is iOS re-delivering intervalDidStart
-            // after we re-registered the monitor mid-window (happens on every
-            // foreground). Re-assert the shield for free.
-        }
+        // Free trial: one charge per schedule per day, shared with the app so
+        // whichever side applies the shield is the side that pays for it.
+        guard TrialGate.claimSession(config, now: Date()) else { return }
 
         Shielder.apply(selection, to: Stores.schedule(parsed.id))
     }

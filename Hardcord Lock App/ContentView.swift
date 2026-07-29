@@ -33,7 +33,15 @@ struct ContentView: View {
     /// step out to manage Schedule/AI and come back. Reset when a lock starts.
     @State private var showFullShield = true
 
-    enum PaywallIntent { case manualLock, unlockPro }
+    enum PaywallIntent {
+        case manualLock
+        case unlockPro
+        /// The user accepted an AI nudge but had no trials left. Carry the
+        /// request through the paywall so buying Pro actually starts the lock
+        /// they asked for — the nudge is the only AI entry point, so dropping it
+        /// would leave a paying user with no way to get their lock.
+        case aiChallenge(FamilyActivitySelection, Int)
+    }
 
     // 嘲讽文案
     private let tauntingMessages = [
@@ -559,6 +567,9 @@ struct ContentView: View {
         // Feature unlocked — re-run automation so schedules/AI that the trial
         // gates were holding back take effect without waiting for a foreground.
         case .unlockPro: refreshAutomation()
+        case .aiChallenge(let selection, let duration):
+            refreshAutomation()
+            startAILock(selection: selection, duration: duration)
         }
     }
 
@@ -617,7 +628,10 @@ struct ContentView: View {
 
         // AI 模式有自己的 3 次免费试用，与手动锁的次数互相独立
         guard storeManager.canUseAI else {
-            presentProPaywall()
+            // Carry the request through the paywall (see PaywallIntent) instead
+            // of dropping it: pendingChallenge is already consumed by now.
+            paywallIntent = .aiChallenge(sel, duration)
+            showPaywall = true
             return
         }
 

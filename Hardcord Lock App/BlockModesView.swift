@@ -232,7 +232,10 @@ struct ScheduleModeView: View {
 
     private func scheduleRow(_ config: ScheduleConfig) -> some View {
         Button(action: {
-            guard storeManager.canUseSchedule else { requestPaywall(); return }
+            // Viewing, editing and DELETING an existing schedule must never be
+            // paywalled — the editor holds the only delete button, so gating it
+            // would trap a user's own schedules behind a purchase once their
+            // trial ran out. Creating a new one is still gated.
             editing = config
             showEditor = true
         }) {
@@ -321,10 +324,13 @@ struct ScheduleEditorView: View {
         let start = startHour * 60 + startMinute
         let end = endHour * 60 + endMinute
         let minLen = 15
+        // A segment capped at midnight really ends 23:59:59, so its usable length
+        // is measured against 1439 — validating against 1440 let 23:45 through
+        // and iOS then rejected the 14m59s interval it produced.
         if end == 0 {                        // "until midnight" — same-day
-            if 1440 - start < minLen { return "Window must be at least 15 minutes." }
+            if 1439 - start < minLen { return "Window must be at least 15 minutes." }
         } else if end <= start {             // overnight split into two halves
-            if 1440 - start < minLen { return "Overnight start must be 23:45 or earlier (iOS minimum window is 15 min)." }
+            if 1439 - start < minLen { return "Overnight start must be 23:44 or earlier (iOS minimum window is 15 min)." }
             if end < minLen { return "Overnight end must be 00:15 or later (iOS minimum window is 15 min)." }
         } else if end - start < minLen {
             return "Window must be at least 15 minutes."

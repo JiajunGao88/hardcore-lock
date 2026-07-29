@@ -107,20 +107,44 @@ enum TrialGate {
         AppGroup.defaults.string(forKey: sessionKey(scheduleId)) == dayKey
     }
 
-    /// A session already charged stays entitled even once the balance hits zero —
-    /// a running block must never be evicted mid-flight.
-    ///
-    /// Yesterday's charge counts ONLY for the morning half of an overnight
-    /// window, which is a continuation of last night's paid session. Accepting
-    /// it unconditionally would hand every schedule a free extra day: with the
-    /// balance at 0 and a stamp from yesterday, the app would re-apply the
-    /// shield today for nothing.
-    static func sessionEntitled(_ config: ScheduleConfig, now: Date) -> Bool {
-        if isPro || scheduleUsesRemaining > 0 { return true }
-        if sessionCounted(scheduleId: config.id, dayKey: AIStatsStore.dayKey(for: now)) { return true }
+    /// The morning half of an overnight window continues last night's session,
+    /// which was already charged — it is not a new one.
+    private static func isOvernightContinuation(_ config: ScheduleConfig, now: Date) -> Bool {
         guard config.isOvernight, AIStatsStore.minuteOfDay(for: now) < config.endMinutes else { return false }
         let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: now) ?? now
         return sessionCounted(scheduleId: config.id, dayKey: AIStatsStore.dayKey(for: yesterday))
+    }
+
+    /// May this schedule block at `now`? PURE — charges nothing, so it is safe
+    /// to call from a SwiftUI body. Use `claimSession` when actually shielding.
+    static func sessionEntitled(_ config: ScheduleConfig, now: Date) -> Bool {
+        if isPro { return true }
+        if sessionCounted(scheduleId: config.id, dayKey: AIStatsStore.dayKey(for: now)) { return true }
+        if isOvernightContinuation(config, now: now) { return true }
+        return scheduleUsesRemaining > 0
+    }
+
+    /// Entitlement AND payment in one step: charges one trial session the first
+    /// time this schedule blocks today, then reports whether it may block.
+    ///
+    /// Whoever applies a shield MUST call this, because whoever applies a shield
+    /// must be the one who pays for it. Previously only the extension charged
+    /// while the app also applied shields, which let a free user block forever
+    /// without the counter ever moving: enable an overnight schedule after
+    /// midnight and the app shields on the strength of the balance, while the
+    /// extension's morning-half branch declines to charge. Repeat nightly.
+    ///
+    /// Idempotent per schedule per day, so re-registering a monitor mid-window —
+    /// which makes iOS re-deliver intervalDidStart — never charges twice.
+    /// NEVER call this from a view body.
+    static func claimSession(_ config: ScheduleConfig, now: Date) -> Bool {
+        if isPro { return true }
+        let todayKey = AIStatsStore.dayKey(for: now)
+        if sessionCounted(scheduleId: config.id, dayKey: todayKey) { return true }
+        if isOvernightContinuation(config, now: now) { return true }
+        guard scheduleUsesRemaining > 0 else { return false }
+        recordScheduleUse(scheduleId: config.id, dayKey: todayKey)
+        return true
     }
     static func recordAIUse() {
         AppGroup.defaults.set(AppGroup.defaults.integer(forKey: StoreKeys.aiTrialCount) + 1,

@@ -135,18 +135,16 @@ final class ScheduleManager: ObservableObject {
     func status(_ config: ScheduleConfig, now: Date = Date()) -> ScheduleStatus {
         guard config.isEnabled else { return .off }
         if emptySelectionIds.contains(config.id) { return .paused("NO APPS") }
-        // Enabled but iOS never accepted its monitors (20-activity cap) → it
-        // will not fire, so saying "armed" would be a lie.
+        // A session already charged stays entitled even at zero balance — never
+        // tell a user their running block is paused.
+        if isActiveNow(config, now: now), TrialGate.sessionEntitled(config, now: now) { return .blocking }
+        // Ask the trial question BEFORE the registration question: a schedule the
+        // trial can't pay for is deliberately left unregistered, and blaming
+        // that on iOS's timer cap would be a lie.
+        if !canEverFire(config, now: now) { return .paused("TRIAL USED UP") }
+        // Enabled and payable, but iOS never accepted its monitors (20-activity
+        // cap, or a rejected window) → it will not fire, so "armed" would lie too.
         if !registeredScheduleIds.contains(config.id) { return .paused("iOS LIMIT") }
-
-        if isActiveNow(config, now: now) {
-            // A session already charged stays entitled even at zero balance —
-            // never tell a user their running block is paused.
-            return TrialGate.sessionEntitled(config, now: now) ? .blocking : .paused("TRIAL USED UP")
-        }
-        // Between windows the question is different: can it fire NEXT time? With
-        // the balance spent it cannot, so "armed" would be a promise we can't keep.
-        if !TrialGate.isPro, TrialGate.scheduleUsesRemaining == 0 { return .paused("TRIAL USED UP") }
         return .armed
     }
 
@@ -180,7 +178,7 @@ final class ScheduleManager: ObservableObject {
         // enabled schedules can't fit in what's free — HabitEngine.refresh()
         // runs right after us (Automation order) and re-fills what remains.
         let neededCost = schedules.reduce(0) { sum, c in
-            guard c.isEnabled, !SelectionStore.isEmpty(selection(for: c.id)) else { return sum }
+            guard c.isEnabled, canEverFire(c), !SelectionStore.isEmpty(selection(for: c.id)) else { return sum }
             return sum + c.activityCount
         }
         let aiWindows = center.activities.filter { $0.rawValue.hasPrefix(ActivityNaming.aiWindowPrefix) }
@@ -189,29 +187,39 @@ final class ScheduleManager: ObservableObject {
             AppGroup.defaults.set(0, forKey: StoreKeys.aiActivityCount)
         }
 
+        var starved: [String] = []
+        var failed: [String] = []
+
         for config in schedules where config.isEnabled {
             let selection = selection(for: config.id)
             guard !SelectionStore.isEmpty(selection) else { continue }
+            // A schedule the trial can never pay for would hold monitor slots
+            // hostage forever (starving AI mode) while never blocking anything.
+            guard canEverFire(config) else { continue }
             let cost = config.activityCount
             if cost > available {
-                lastBudgetWarning = "Some schedules are paused: iOS limits background blocking to \(ActivityBudget.max) timers. Reduce days/schedules."
-                break
+                // `continue`, not `break`: a later schedule may be cheap enough
+                // to fit in what's left. One expensive schedule must not silently
+                // disable every schedule after it in the list.
+                starved.append(config.name)
+                continue
             }
             do {
                 try register(config)
                 available -= cost
-                // If we're inside the window right now, apply the shield immediately
-                // so foreground re-registration never opens a gap. Free users must
-                // still have trial sessions left (the extension counts them at
-                // window start; this path only re-asserts, it never counts).
-                if isActiveNow(config), TrialGate.sessionEntitled(config, now: Date()) {
+                // Inside the window right now → shield immediately so foreground
+                // re-registration never opens a gap. claimSession charges the
+                // first block of the day; it is idempotent, so re-asserting is free.
+                if isActiveNow(config), TrialGate.claimSession(config, now: Date()) {
                     Shielder.apply(selection, to: Stores.schedule(config.id))
                 }
             } catch {
-                lastBudgetWarning = "Couldn't activate “\(config.name)”. iOS background-timer limit reached."
-                break
+                failed.append(config.name)
+                continue
             }
         }
+
+        lastBudgetWarning = budgetWarning(starved: starved, failed: failed)
 
         // Write the GROUND-TRUTH count (not an accumulator) so a partial/failed
         // registration can't desync the budget shared with AI mode.
@@ -222,6 +230,23 @@ final class ScheduleManager: ObservableObject {
         // DeviceActivity again (see `status(_:now:)`).
         registeredScheduleIds = Set(live.compactMap { ActivityNaming.parseSchedule($0.rawValue)?.id })
         emptySelectionIds = Set(schedules.filter { SelectionStore.isEmpty(selection(for: $0.id)) }.map(\.id))
+    }
+
+    /// False when the free trial can never pay for this schedule again, so
+    /// registering it would burn monitor slots for something that can't fire.
+    private func canEverFire(_ config: ScheduleConfig, now: Date = Date()) -> Bool {
+        TrialGate.isPro || TrialGate.scheduleUsesRemaining > 0 || TrialGate.sessionEntitled(config, now: now)
+    }
+
+    private func budgetWarning(starved: [String], failed: [String]) -> String? {
+        var parts: [String] = []
+        if !starved.isEmpty {
+            parts.append("Paused (iOS allows only \(ActivityBudget.max) background timers): \(starved.joined(separator: ", ")). Use fewer days or schedules.")
+        }
+        if !failed.isEmpty {
+            parts.append("Couldn't activate: \(failed.joined(separator: ", ")). Check Screen Time access and that each window is at least 15 minutes.")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: "\n")
     }
 
     // MARK: - Registration
