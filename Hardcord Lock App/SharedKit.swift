@@ -84,18 +84,34 @@ enum TrialGate {
         max(0, limit - AppGroup.defaults.integer(forKey: StoreKeys.aiTrialCount))
     }
 
+    private static func sessionKey(_ scheduleId: String) -> String { "trial.sch.session.\(scheduleId)" }
+
     /// Count one fired scheduled session and remember which day it ran for this
-    /// schedule, so the overnight morning half can verify its evening half was paid.
+    /// schedule. The day stamp does double duty: it lets the overnight morning
+    /// half verify its evening half was paid, AND it makes the charge idempotent
+    /// (iOS re-delivers intervalDidStart every time we re-register a monitor
+    /// mid-window, which happens on every foreground — without this a user would
+    /// burn all three free sessions just by opening the app three times).
     static func recordScheduleUse(scheduleId: String, dayKey: String) {
         AppGroup.defaults.set(AppGroup.defaults.integer(forKey: StoreKeys.scheduleTrialCount) + 1,
                               forKey: StoreKeys.scheduleTrialCount)
-        AppGroup.defaults.set(dayKey, forKey: "trial.sch.session.\(scheduleId)")
+        AppGroup.defaults.set(dayKey, forKey: sessionKey(scheduleId))
     }
 
-    /// The overnight morning ("o1") half is free ONLY when the evening half of the
-    /// same schedule actually ran (and was counted) the previous day.
-    static func overnightContinuationAllowed(scheduleId: String, eveningDayKey: String) -> Bool {
-        AppGroup.defaults.string(forKey: "trial.sch.session.\(scheduleId)") == eveningDayKey
+    /// Has this schedule's session for `dayKey` already been charged?
+    static func sessionCounted(scheduleId: String, dayKey: String) -> Bool {
+        AppGroup.defaults.string(forKey: sessionKey(scheduleId)) == dayKey
+    }
+
+    /// A session already paid for today (or yesterday, for the morning half of an
+    /// overnight window) stays entitled even once the balance hits zero — running
+    /// sessions must never be evicted mid-flight.
+    static func sessionEntitled(scheduleId: String, now: Date) -> Bool {
+        if isPro || scheduleUsesRemaining > 0 { return true }
+        let cal = Calendar.current
+        let yesterday = cal.date(byAdding: .day, value: -1, to: now) ?? now
+        return sessionCounted(scheduleId: scheduleId, dayKey: AIStatsStore.dayKey(for: now))
+            || sessionCounted(scheduleId: scheduleId, dayKey: AIStatsStore.dayKey(for: yesterday))
     }
     static func recordAIUse() {
         AppGroup.defaults.set(AppGroup.defaults.integer(forKey: StoreKeys.aiTrialCount) + 1,
@@ -257,7 +273,10 @@ enum WeekParity {
     static func isActiveWeek(_ config: ScheduleConfig, on date: Date, morningHalf: Bool = false) -> Bool {
         guard config.everyNWeeks > 1 else { return true }
         let cal = Calendar.current
-        let evalDate = morningHalf ? date.addingTimeInterval(-24 * 3600) : date
+        // Calendar arithmetic, not a fixed 86400s: on a DST spring-forward day a
+        // literal 24h shift lands on the wrong calendar day (and so, at a week
+        // boundary, the wrong week) and would silently skip an overnight block.
+        let evalDate = morningHalf ? (cal.date(byAdding: .day, value: -1, to: date) ?? date) : date
         let anchor = Date(timeIntervalSince1970: config.anchorEpoch)
 
         guard let anchorWeek = cal.dateInterval(of: .weekOfYear, for: anchor)?.start,
@@ -406,6 +425,12 @@ struct AIConfig: Codable, Equatable {
 
     /// Precise time label like "8:35 PM".
     static func minuteLabel(_ minuteOfDay: Int) -> String { clock(minuteOfDay) }
+
+    /// When the pre-cue fires: `leadMinutes` before the peak, wrapped around
+    /// midnight. Shared so the UI label and the scheduler can never disagree.
+    static func nudgeMinute(peakMinute: Int, leadMinutes: Int) -> Int {
+        ((peakMinute - leadMinutes) % 1440 + 1440) % 1440
+    }
 }
 
 enum AIConfigStore {
@@ -605,7 +630,9 @@ enum NudgeScheduler {
         // Fine timing: the precise minute from the timestamps, falling back to the
         // peak hour until enough samples have accumulated.
         let targetMinute = AIPredictor.predictedPeakMinute(stats: stats) ?? (AIConfig.displayBinStartHour(peak) * 60)
-        let fireMinutes = max(0, targetMinute - config.leadMinutes)
+        // Wrap, don't clamp: a 00:05 peak with a 15-min lead fires at 23:50 the
+        // previous evening, not at midnight.
+        let fireMinutes = AIConfig.nudgeMinute(peakMinute: targetMinute, leadMinutes: config.leadMinutes)
         var fire = DateComponents()
         fire.hour = fireMinutes / 60
         fire.minute = fireMinutes % 60

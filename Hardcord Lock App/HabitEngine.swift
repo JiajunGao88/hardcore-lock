@@ -25,6 +25,7 @@ import Foundation
 import Combine
 import DeviceActivity
 import FamilyControls
+import UserNotifications
 
 @MainActor
 final class HabitEngine: ObservableObject {
@@ -95,6 +96,11 @@ final class HabitEngine: ObservableObject {
     func setEnabled(_ enabled: Bool) {
         config.isEnabled = enabled
         AIConfigStore.save(config)
+        if enabled {
+            // The pre-cue notification is the only way this mode ever acts, so
+            // ask for permission when the feature is switched on.
+            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        }
         if !enabled {
             stopWindows()
             NudgeScheduler.cancel()
@@ -134,6 +140,9 @@ final class HabitEngine: ObservableObject {
             registerWindows()
             NudgeScheduler.reschedule()
         } else {
+            // Nothing is registered on this path, so a leftover budget warning
+            // would be a permanent lie on the AI screen.
+            lastBudgetWarning = nil
             stopWindows()
             NudgeScheduler.cancel()
         }
@@ -147,6 +156,7 @@ final class HabitEngine: ObservableObject {
 
     private func registerWindows() {
         guard !SelectionStore.isEmpty(watchedSelection) else {
+            lastBudgetWarning = nil
             stopWindows()
             registeredSelection = nil
             return

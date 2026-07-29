@@ -391,7 +391,7 @@ struct ContentView: View {
             .padding(.bottom, 20)
             #endif
         }
-        .onReceive(Timer.publish(every: 10, on: .main, in: .common).autoconnect()) { _ in
+        .onReceive(AppClock.everyTenSeconds) { _ in
             currentTaunt = tauntingMessages.randomElement() ?? "Stay focused."
         }
     }
@@ -596,6 +596,9 @@ struct ContentView: View {
     // MARK: - AI challenge flow
 
     private func startAIChallenge() {
+        // Self-guarding: onAppear and the scenePhase handler can both see the
+        // same pending request, and only the first may act on it.
+        guard habitEngine.pendingChallenge else { return }
         habitEngine.pendingChallenge = false
         // Never let an AI nudge hijack/reset a lock that is already running.
         guard !lockManager.isLocked else {

@@ -36,6 +36,12 @@ final class ScheduleManager: ObservableObject {
     /// Set when the last reconcile hit the 20-activity system cap.
     @Published var lastBudgetWarning: String?
 
+    /// Snapshots taken by `reconcile()` so `status(_:now:)` — which SwiftUI calls
+    /// once per row on every render — stays pure arithmetic instead of doing
+    /// UserDefaults I/O, a JSON decode and a DeviceActivityCenter query per row.
+    @Published private(set) var registeredScheduleIds: Set<String> = []
+    @Published private(set) var emptySelectionIds: Set<String> = []
+
     private let center = DeviceActivityCenter()
 
     private init() {
@@ -121,15 +127,18 @@ final class ScheduleManager: ObservableObject {
     /// it means "inside its clock window", which users read as "switched on".
     func status(_ config: ScheduleConfig, now: Date = Date()) -> ScheduleStatus {
         guard config.isEnabled else { return .off }
-        if SelectionStore.isEmpty(selection(for: config.id)) { return .paused("NO APPS") }
-        if !TrialGate.isPro, TrialGate.scheduleUsesRemaining == 0 { return .paused("TRIAL USED UP") }
+        if emptySelectionIds.contains(config.id) { return .paused("NO APPS") }
         // Enabled but iOS never accepted its monitors (20-activity cap) → it
         // will not fire, so saying "armed" would be a lie.
-        let registered = center.activities.contains {
-            ActivityNaming.parseSchedule($0.rawValue)?.id == config.id
+        if !registeredScheduleIds.contains(config.id) { return .paused("iOS LIMIT") }
+
+        let blocking = isActiveNow(config, now: now)
+        // A session already charged today stays entitled even at zero balance —
+        // never tell a user their running block is paused.
+        if !TrialGate.sessionEntitled(scheduleId: config.id, now: now) {
+            return .paused("TRIAL USED UP")
         }
-        if !registered { return .paused("iOS LIMIT") }
-        return isActiveNow(config, now: now) ? .blocking : .armed
+        return blocking ? .blocking : .armed
     }
 
     // MARK: - Reconcile DeviceActivity monitors
@@ -186,7 +195,7 @@ final class ScheduleManager: ObservableObject {
                 // so foreground re-registration never opens a gap. Free users must
                 // still have trial sessions left (the extension counts them at
                 // window start; this path only re-asserts, it never counts).
-                if isActiveNow(config), TrialGate.isPro || TrialGate.scheduleUsesRemaining > 0 {
+                if isActiveNow(config), TrialGate.sessionEntitled(scheduleId: config.id, now: Date()) {
                     Shielder.apply(selection, to: Stores.schedule(config.id))
                 }
             } catch {
@@ -197,8 +206,13 @@ final class ScheduleManager: ObservableObject {
 
         // Write the GROUND-TRUTH count (not an accumulator) so a partial/failed
         // registration can't desync the budget shared with AI mode.
-        let liveCount = center.activities.filter { $0.rawValue.hasPrefix(ActivityNaming.schedulePrefix) }.count
-        AppGroup.defaults.set(liveCount, forKey: StoreKeys.scheduleActivityCount)
+        let live = center.activities.filter { $0.rawValue.hasPrefix(ActivityNaming.schedulePrefix) }
+        AppGroup.defaults.set(live.count, forKey: StoreKeys.scheduleActivityCount)
+
+        // Snapshot what the badge needs, so rendering never touches disk or
+        // DeviceActivity again (see `status(_:now:)`).
+        registeredScheduleIds = Set(live.compactMap { ActivityNaming.parseSchedule($0.rawValue)?.id })
+        emptySelectionIds = Set(schedules.filter { SelectionStore.isEmpty(selection(for: $0.id)) }.map(\.id))
     }
 
     // MARK: - Registration

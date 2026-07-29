@@ -8,6 +8,19 @@
 
 import SwiftUI
 import FamilyControls
+import UserNotifications
+
+// MARK: - Shared tickers
+
+/// Timer publishers MUST outlive a View struct. A `let` (or an inline
+/// `Timer.publish(...)`) stored on a view is re-created on every re-init, and
+/// SwiftUI then cancels and re-subscribes — restarting the interval. ContentView
+/// re-renders ~2x/second while a lock runs, so such a timer would never fire.
+/// These live for the process instead, so their cadence is stable.
+enum AppClock {
+    static let everyThirtySeconds = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
+    static let everyTenSeconds = Timer.publish(every: 10, on: .main, in: .common).autoconnect()
+}
 
 // MARK: - Mode
 
@@ -137,6 +150,7 @@ struct TimeWheel: View {
 struct ScheduleModeView: View {
     @ObservedObject var scheduleManager = ScheduleManager.shared
     @ObservedObject var storeManager = StoreManager.shared
+    @Environment(\.scenePhase) private var scenePhase
 
     /// Present the Pro paywall (feature is Pro-gated).
     var requestPaywall: () -> Void
@@ -148,7 +162,6 @@ struct ScheduleModeView: View {
     /// on published changes — without this tick a window opening while the screen
     /// is up would never light up. 30s is enough: windows are minute-aligned.
     @State private var now = Date()
-    private let clock = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
     var body: some View {
         VStack(spacing: 16) {
@@ -209,7 +222,9 @@ struct ScheduleModeView: View {
         }
         .padding(.bottom, 16)
         .onAppear { now = Date() }
-        .onReceive(clock) { now = $0 }
+        // Timers fire nothing while suspended, so resync on foreground too.
+        .onChange(of: scenePhase) { _, phase in if phase == .active { now = Date() } }
+        .onReceive(AppClock.everyThirtySeconds) { now = $0 }
         .sheet(isPresented: $showEditor) {
             ScheduleEditorView(existing: editing)
         }
@@ -487,6 +502,12 @@ struct AIModeView: View {
 
     @State private var showPicker = false
     @State private var localSelection = HabitEngine.shared.watchedSelection
+    /// The toggle was flipped on before any app was chosen; finish the job once
+    /// the picker comes back with a selection.
+    @State private var enableAfterPicking = false
+    /// The nudge is the ONLY way an AI lock starts, so denied notifications
+    /// silently make the whole mode inert — say so instead of promising a nudge.
+    @State private var notificationsAllowed = true
 
     private var watchedCount: Int {
         let s = habit.watchedSelection
@@ -518,8 +539,17 @@ struct AIModeView: View {
                             get: { habit.config.isEnabled },
                             set: { v in
                                 if v && !storeManager.canUseAI { requestPaywall(); return }
-                                if v && watchedCount == 0 { showPicker = true }
-                                habit.setEnabled(v)
+                                guard v else { enableAfterPicking = false; habit.setEnabled(false); return }
+                                // Turning AI on with nothing watched would be
+                                // normalized straight back to off, so pick apps
+                                // FIRST and enable once we have a selection.
+                                if watchedCount == 0 {
+                                    localSelection = habit.watchedSelection
+                                    enableAfterPicking = true
+                                    showPicker = true
+                                    return
+                                }
+                                habit.setEnabled(true)
                             }
                         ))
                         .labelsHidden().tint(.white)
@@ -573,9 +603,9 @@ struct AIModeView: View {
                         Text(nudgeLabel)
                             .font(.system(size: 16, weight: .medium, design: .monospaced))
                             .foregroundColor(.white)
-                        Text("Tap LOCK NOW on that notification to start a \(durationLabel(habit.config.lockDurationSeconds)) lock. Nothing here locks you on its own.")
+                        Text(nudgeCaption)
                             .font(.system(size: 11, design: .monospaced))
-                            .foregroundColor(.gray)
+                            .foregroundColor(notificationsAllowed ? .gray : .orange.opacity(0.9))
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -603,8 +633,17 @@ struct AIModeView: View {
         }
         .familyActivityPicker(isPresented: $showPicker, selection: $localSelection)
         .onChange(of: showPicker) { _, isShowing in
-            if !isShowing { habit.saveWatchedSelection(localSelection) }
+            guard !isShowing else { return }
+            // Persist BEFORE enabling: setEnabled reconciles, and reconcile
+            // reloads the selection from the store — enabling first would see an
+            // empty selection and switch AI straight back off.
+            habit.saveWatchedSelection(localSelection)
+            if enableAfterPicking {
+                enableAfterPicking = false
+                if !SelectionStore.isEmpty(localSelection) { habit.setEnabled(true) }
+            }
         }
+        .task { await refreshNotificationStatus() }
     }
 
     private var leadTimePicker: some View {
@@ -661,10 +700,25 @@ struct AIModeView: View {
     private var nudgeLabel: String {
         guard habit.config.isEnabled else { return "AI mode is off" }
         guard watchedCount > 0 else { return "Pick apps to watch first" }
+        guard notificationsAllowed else { return "Notifications are off" }
         let peak = habit.predictedPeakMinute
             ?? habit.predictedPeakIndex.map { AIConfig.displayBinStartHour($0) * 60 }
         guard let target = peak else { return "Still learning — no nudge yet" }
-        return "\(AIConfig.minuteLabel(max(0, target - habit.config.leadMinutes))) daily"
+        let fire = AIConfig.nudgeMinute(peakMinute: target, leadMinutes: habit.config.leadMinutes)
+        return "\(AIConfig.minuteLabel(fire)) daily"
+    }
+
+    /// Explains the state above, so the panel is never just a dead end.
+    private var nudgeCaption: String {
+        if !notificationsAllowed {
+            return "AI mode nudges you through a notification, so it can't do anything until you allow notifications for FIFTEEN in Settings."
+        }
+        return "Tap LOCK NOW on that notification to start a \(durationLabel(habit.config.lockDurationSeconds)) lock. Nothing here locks you on its own."
+    }
+
+    private func refreshNotificationStatus() async {
+        let status = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
+        notificationsAllowed = (status == .authorized || status == .provisional || status == .ephemeral)
     }
 
     private var insightPanel: some View {
