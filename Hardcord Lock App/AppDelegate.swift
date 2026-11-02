@@ -33,7 +33,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             identifier: HabitEngine.categoryIdentifier,
             actions: [lockNow, skip],
             intentIdentifiers: [],
-            options: []
+            // Report swipe-to-dismiss too: it is the bandit's "no" signal.
+            options: [.customDismissAction]
         )
         center.setNotificationCategories([category])
     }
@@ -53,17 +54,21 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         let category = response.notification.request.content.categoryIdentifier
 
         if category == HabitEngine.categoryIdentifier {
+            let lead = response.notification.request.content.userInfo[NudgeScheduler.leadKey] as? Int
             switch action {
             case HabitEngine.actionLockNow:
                 // ONLY the explicit "LOCK NOW" action starts a lock. Merely
                 // tapping the banner (UNNotificationDefaultActionIdentifier)
                 // must just open the app — locking someone for hours because
                 // they glanced at a notification is not consent.
+                if let lead { LeadBanditStore.record(leadMinutes: lead, accepted: true) }
                 Task { @MainActor in
                     HabitEngine.shared.requestChallenge()
                 }
+            case HabitEngine.actionSkip, UNNotificationDismissActionIdentifier:
+                if let lead { LeadBanditStore.record(leadMinutes: lead, accepted: false) }
             default:
-                break // Banner tap / "Not today" / dismiss → just open the app.
+                break // Banner tap → just open the app; neither a yes nor a no.
             }
         }
         completionHandler()

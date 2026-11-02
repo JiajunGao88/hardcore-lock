@@ -1,0 +1,38 @@
+name: Set up Xcode
+description: Select the newest Xcode 26.x on the runner and pick an iPhone simulator.
+outputs:
+  simulator-id:
+    description: UDID of an available iPhone simulator on the newest iOS runtime.
+    value: ${{ steps.sim.outputs.udid }}
+runs:
+  using: composite
+  steps:
+    - name: Select Xcode
+      shell: bash
+      run: |
+        XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+        if [ -z "$XCODE" ]; then
+          echo "::error::No Xcode 26 on this runner image. Available:"; ls /Applications | grep -i xcode; exit 1
+        fi
+        sudo xcode-select -s "$XCODE/Contents/Developer"
+        xcodebuild -version
+    - name: Pick simulator
+      id: sim
+      shell: bash
+      run: |
+        UDID=$(xcrun simctl list devices available -j | python3 -c '
+        import json, re, sys
+        devices = json.load(sys.stdin)["devices"]
+        def version(runtime):
+            return [int(n) for n in re.findall(r"\d+", runtime.split("iOS")[-1])]
+        best = None
+        for runtime in sorted((r for r in devices if "iOS" in r), key=version, reverse=True):
+            phones = [d for d in devices[runtime] if d["name"].startswith("iPhone")]
+            if phones:
+                best = phones[0]
+                break
+        print(best["udid"] if best else "")
+        ')
+        if [ -z "$UDID" ]; then echo "::error::No iPhone simulator available"; xcrun simctl list devices available; exit 1; fi
+        echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+        xcrun simctl list devices | grep "$UDID"

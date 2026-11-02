@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import UIKit
 import FamilyControls
 import UserNotifications
 
@@ -31,47 +32,176 @@ enum BlockMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+// MARK: - Design tokens
+
+/// One place for the brutalist look: black, white, monospaced, hairlines.
+/// Secondary text is white at fixed opacities rather than `.gray`, which
+/// shifts with the system appearance and fell under WCAG contrast on black.
+enum Theme {
+    static let gutter: CGFloat = 24
+    static let rowPadding: CGFloat = 16
+    static let hairline = Color.white.opacity(0.18)
+    static let hairlineStrong = Color.white.opacity(0.4)
+    static let secondary = Color.white.opacity(0.6)
+    static let tertiary = Color.white.opacity(0.38)
+    static let warning = Color.orange
+    static let danger = Color(red: 1, green: 0.32, blue: 0.29)
+
+    static func mono(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
+        .system(size: size, weight: weight, design: .monospaced)
+    }
+}
+
+/// Solid white slab — the one primary action on a screen.
+struct PrimaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(Theme.mono(18, .bold))
+            .foregroundColor(.black)
+            .frame(maxWidth: .infinity, minHeight: 56)
+            .background(Color.white.opacity(configuration.isPressed ? 0.8 : 1))
+            .opacity(isEnabled ? 1 : 0.35)
+            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
+/// Hairline outline — secondary actions and tappable rows.
+struct OutlineButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .contentShape(Rectangle())
+            .background(Color.white.opacity(configuration.isPressed ? 0.08 : 0))
+            .overlay(Rectangle().stroke(Theme.hairline, lineWidth: 1))
+            .opacity(isEnabled ? 1 : 0.4)
+    }
+}
+
+/// Text-only, for quiet links ("RESTORE PURCHASE").
+struct QuietButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(Theme.mono(12, .medium))
+            .foregroundColor(Theme.secondary)
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+            .opacity(configuration.isPressed ? 0.5 : 1)
+    }
+}
+
+/// An inline notice: orange for "won't work until you fix this", red for "broken".
+struct NoticeBanner: View {
+    let text: String
+    var isError = false
+    var actionTitle: String?
+    var action: (() -> Void)?
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Rectangle()
+                .fill(isError ? Theme.danger : Theme.warning)
+                .frame(width: 3)
+            Text(text)
+                .font(Theme.mono(11))
+                .foregroundColor(.white.opacity(0.9))
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let actionTitle, let action {
+                Button(actionTitle, action: action)
+                    .font(Theme.mono(11, .bold))
+                    .foregroundColor(.white)
+                    .frame(minHeight: 32)
+            }
+        }
+        .padding(.vertical, 10)
+        .padding(.trailing, 12)
+        .background(Color.white.opacity(0.05))
+    }
+}
+
 // MARK: - Mode picker bar
 
 struct ModePickerBar: View {
     @Binding var mode: BlockMode
+    @Namespace private var selection
 
     var body: some View {
         HStack(spacing: 0) {
             ForEach(BlockMode.allCases) { m in
-                Button(action: { withAnimation(.easeInOut(duration: 0.15)) { mode = m } }) {
+                Button(action: { withAnimation(.snappy(duration: 0.22)) { mode = m } }) {
                     Text(m.rawValue)
-                        .font(.system(size: 12, weight: .bold, design: .monospaced))
-                        .foregroundColor(mode == m ? .black : .gray)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(mode == m ? Color.white : Color.clear)
+                        .font(Theme.mono(12, .bold))
+                        .foregroundColor(mode == m ? .black : Theme.secondary)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .background {
+                            if mode == m {
+                                Rectangle().fill(Color.white).matchedGeometryEffect(id: "mode", in: selection)
+                            }
+                        }
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(mode == m ? .isSelected : [])
             }
         }
-        .overlay(Rectangle().stroke(Color.white.opacity(0.2), lineWidth: 1))
-        .padding(.horizontal, 24)
+        .overlay(Rectangle().stroke(Theme.hairline, lineWidth: 1))
+        .padding(.horizontal, Theme.gutter)
+        .sensoryFeedback(.selection, trigger: mode)
     }
 }
 
 // MARK: - Small shared bits
 
-private struct SectionLabel: View {
+struct SectionLabel: View {
     let text: String
     var body: some View {
         Text(text)
-            .font(.system(size: 12, weight: .regular, design: .monospaced))
-            .foregroundColor(.gray)
+            .font(Theme.mono(11, .medium))
+            .tracking(0.5)
+            .foregroundColor(Theme.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityAddTraits(.isHeader)
     }
 }
 
-private struct OutlineRow<Content: View>: View {
+struct OutlineRow<Content: View>: View {
     @ViewBuilder var content: Content
     var body: some View {
         content
-            .padding(16)
-            .overlay(Rectangle().stroke(Color.white.opacity(0.2), lineWidth: 1))
+            .padding(Theme.rowPadding)
+            .overlay(Rectangle().stroke(Theme.hairline, lineWidth: 1))
+    }
+}
+
+/// Label over value with a chevron — the "pick something" row used everywhere.
+struct PickerRow: View {
+    let label: String
+    let value: String
+    var placeholder = false
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(label)
+                    .font(Theme.mono(11, .medium))
+                    .foregroundColor(Theme.secondary)
+                Text(value)
+                    .font(Theme.mono(17, .medium))
+                    .foregroundColor(placeholder ? Theme.tertiary : .white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            Spacer(minLength: 12)
+            Image(systemName: "chevron.right")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(Theme.tertiary)
+        }
+        .padding(Theme.rowPadding)
+        .frame(minHeight: 64)
     }
 }
 
@@ -89,14 +219,16 @@ private struct ScheduleStatusBadge: View {
         case .blocking:
             chip("BLOCKING NOW", color: .white, filled: true)
         case .paused(let reason):
-            chip("PAUSED · \(reason)", color: .orange.opacity(0.9), filled: false)
+            chip("PAUSED · \(reason)", color: Theme.warning, filled: false)
         }
     }
 
     private func chip(_ text: String, color: Color, filled: Bool) -> some View {
         Text(text)
-            .font(.system(size: 9, weight: .bold, design: .monospaced))
+            .font(Theme.mono(9, .bold))
             .foregroundColor(filled ? .black : color)
+            .lineLimit(1)
+            .fixedSize()
             .padding(.horizontal, 6).padding(.vertical, 3)
             .background(filled ? color : Color.clear)
             .overlay(
@@ -116,10 +248,10 @@ struct TimeWheel: View {
     var body: some View {
         VStack(spacing: 8) {
             Text(title)
-                .font(.system(size: 11, weight: .regular, design: .monospaced))
-                .foregroundColor(.gray)
+                .font(Theme.mono(11, .medium))
+                .foregroundColor(Theme.secondary)
             HStack(spacing: 6) {
-                Picker("", selection: $hour) {
+                Picker("\(title) hour", selection: $hour) {
                     ForEach(0..<24, id: \.self) { h in
                         Text(String(format: "%02d", h))
                             .font(.system(size: 22, weight: .medium, design: .monospaced))
@@ -132,7 +264,7 @@ struct TimeWheel: View {
                     .font(.system(size: 22, weight: .bold, design: .monospaced))
                     .foregroundColor(.white)
 
-                Picker("", selection: $minute) {
+                Picker("\(title) minute", selection: $minute) {
                     ForEach(0..<60, id: \.self) { m in
                         Text(String(format: "%02d", m))
                             .font(.system(size: 22, weight: .medium, design: .monospaced))
@@ -142,6 +274,66 @@ struct TimeWheel: View {
                 .pickerStyle(.wheel).frame(width: 80, height: 150).clipped()
             }
         }
+    }
+}
+
+// MARK: - Shared formatting & controls
+
+enum UIFormat {
+    static let time: DateFormatter = {
+        let f = DateFormatter()
+        f.timeStyle = .short
+        f.dateStyle = .none
+        return f
+    }()
+
+    /// "45m", "2h 30m", "3d 4h" — never "4320m".
+    static func duration(_ seconds: Int) -> String {
+        let d = seconds / 86_400, h = (seconds % 86_400) / 3600, m = (seconds % 3600) / 60
+        if d > 0 { return h > 0 ? "\(d)d \(h)h" : "\(d)d" }
+        if h > 0 { return m > 0 ? "\(h)h \(m)m" : "\(h)h" }
+        return "\(m)m"
+    }
+}
+
+extension ScheduleManager.ChangeRefusal {
+    var message: String {
+        switch self {
+        case .committed(let until):
+            let when = until.map { "until \(UIFormat.time.string(from: $0))" } ?? "until this block ends"
+            return "This schedule is blocking right now. It can't be switched off, edited or deleted \(when).\n\nThat's the point."
+        }
+    }
+}
+
+/// Square, high-contrast switch. The stock Toggle tinted white draws a white
+/// thumb on a white track — the ON state was nearly invisible.
+struct BrutalToggleStyle: ToggleStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        let on = configuration.isOn
+        return ZStack(alignment: on ? .trailing : .leading) {
+            Rectangle()
+                .fill(on ? Color.white : Color.clear)
+                .overlay(Rectangle().stroke(on ? Color.white : Theme.hairlineStrong, lineWidth: 1))
+            Rectangle()
+                .fill(on ? Color.black : Theme.secondary)
+                .frame(width: 18, height: 18)
+                .padding(5)
+        }
+        .frame(width: 52, height: 28)
+        .frame(minWidth: 44, minHeight: 44)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            withAnimation(.snappy(duration: 0.18)) { configuration.isOn.toggle() }
+        }
+        .opacity(isEnabled ? 1 : 0.4)
+        .sensoryFeedback(.impact(weight: .light), trigger: on)
+        .accessibilityElement()
+        .accessibilityAddTraits(.isToggle)
+        .accessibilityValue(on ? "On" : "Off")
+        .accessibilityAction { configuration.isOn.toggle() }
     }
 }
 
@@ -155,8 +347,11 @@ struct ScheduleModeView: View {
     /// Present the Pro paywall (feature is Pro-gated).
     var requestPaywall: () -> Void
 
+    /// `sheet(item:)`, not a Bool + separate state: with the Bool the sheet could
+    /// render before `editing` was set and open the wrong schedule (or a blank one).
     @State private var editing: ScheduleConfig?
-    @State private var showEditor = false
+    @State private var creating = false
+    @State private var refusalMessage: String?
 
     /// A schedule's status depends on the wall clock, but SwiftUI only re-renders
     /// on published changes — without this tick a window opening while the screen
@@ -164,107 +359,130 @@ struct ScheduleModeView: View {
     @State private var now = Date()
 
     var body: some View {
-        VStack(spacing: 16) {
-            HStack {
+        ScrollView {
+            VStack(spacing: 12) {
                 SectionLabel(text: "AUTO-BLOCK ON A SCHEDULE")
-                Spacer()
-            }
-            .padding(.horizontal, 24)
 
-            if let warning = scheduleManager.lastBudgetWarning {
-                Text(warning)
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundColor(.orange.opacity(0.9))
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 24)
-            }
+                if let warning = scheduleManager.lastBudgetWarning {
+                    NoticeBanner(text: warning)
+                }
 
-            ScrollView {
-                VStack(spacing: 12) {
-                    if scheduleManager.schedules.isEmpty {
-                        Text("No schedules yet.\nCreate one to block apps automatically\nat the times you choose.")
-                            .font(.system(size: 14, design: .monospaced))
-                            .foregroundColor(.gray)
-                            .multilineTextAlignment(.center)
-                            .padding(.top, 40)
-                    } else {
-                        ForEach(scheduleManager.schedules) { config in
-                            scheduleRow(config)
-                        }
+                if scheduleManager.schedules.isEmpty {
+                    emptyState
+                } else {
+                    ForEach(scheduleManager.schedules) { config in
+                        scheduleRow(config)
                     }
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 4)
             }
+            .padding(.horizontal, Theme.gutter)
+            .padding(.top, 8)
+            .padding(.bottom, 16)
+        }
+        .scrollIndicators(.hidden)
+        .safeAreaInset(edge: .bottom) { footer }
+        .onAppear { now = Date() }
+        // Timers fire nothing while suspended, so resync on foreground too.
+        .onChange(of: scenePhase) { _, phase in if phase == .active { now = Date() } }
+        .onReceive(AppClock.everyThirtySeconds) { now = $0 }
+        .sheet(item: $editing) { config in
+            ScheduleEditorView(existing: config)
+        }
+        .sheet(isPresented: $creating) {
+            ScheduleEditorView(existing: nil)
+        }
+        .alert("LOCKED IN", isPresented: Binding(
+            get: { refusalMessage != nil },
+            set: { if !$0 { refusalMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: { Text(refusalMessage ?? "") }
+    }
 
-            Button(action: {
+    private var emptyState: some View {
+        VStack(spacing: 10) {
+            Text("NO SCHEDULES")
+                .font(Theme.mono(14, .bold))
+                .foregroundColor(.white)
+            Text("Block apps automatically at the times you choose — even when FIFTEEN is closed.")
+                .font(Theme.mono(12))
+                .foregroundColor(Theme.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 40)
+        .padding(.horizontal, 20)
+        .overlay(Rectangle().stroke(Theme.hairline, style: StrokeStyle(lineWidth: 1, dash: [4, 4])))
+    }
+
+    private var footer: some View {
+        VStack(spacing: 8) {
+            Button("+ NEW SCHEDULE") {
                 guard storeManager.canUseSchedule else { requestPaywall(); return }
-                editing = nil
-                showEditor = true
-            }) {
-                Text("+ NEW SCHEDULE")
-                    .font(.system(size: 16, weight: .bold, design: .monospaced))
-                    .foregroundColor(.black)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(Color.white)
+                creating = true
             }
-            .padding(.horizontal, 24)
+            .buttonStyle(PrimaryButtonStyle())
 
             if !storeManager.purchasedPro {
                 Text(storeManager.scheduleTrialsRemaining > 0
                      ? "FREE TRIAL: \(storeManager.scheduleTrialsRemaining)/\(TrialGate.limit) SCHEDULED SESSIONS LEFT"
                      : "TRIAL USED UP — SCHEDULE MODE IS A PRO FEATURE")
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundColor(.gray.opacity(0.7))
+                    .font(Theme.mono(10))
+                    .foregroundColor(Theme.tertiary)
             }
         }
-        .padding(.bottom, 16)
-        .onAppear { now = Date() }
-        // Timers fire nothing while suspended, so resync on foreground too.
-        .onChange(of: scenePhase) { _, phase in if phase == .active { now = Date() } }
-        .onReceive(AppClock.everyThirtySeconds) { now = $0 }
-        .sheet(isPresented: $showEditor) {
-            ScheduleEditorView(existing: editing)
-        }
+        .padding(.horizontal, Theme.gutter)
+        .padding(.vertical, 12)
+        .background(Color.black)
     }
 
     private func scheduleRow(_ config: ScheduleConfig) -> some View {
-        Button(action: {
-            // Viewing, editing and DELETING an existing schedule must never be
-            // paywalled — the editor holds the only delete button, so gating it
-            // would trap a user's own schedules behind a purchase once their
-            // trial ran out. Creating a new one is still gated.
-            editing = config
-            showEditor = true
-        }) {
-            HStack {
+        let status = scheduleManager.status(config, now: now)
+        return HStack(spacing: 12) {
+            // The row body opens the editor; the switch is a sibling, not nested
+            // inside the button, so flipping it never also opens the editor.
+            // Viewing, editing and deleting are never paywalled — only creating.
+            Button { editing = config } label: {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 8) {
                         Text(config.name.uppercased())
-                            .font(.system(size: 16, weight: .bold, design: .monospaced))
+                            .font(Theme.mono(16, .bold))
                             .foregroundColor(.white)
-                        ScheduleStatusBadge(status: scheduleManager.status(config, now: now))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        ScheduleStatusBadge(status: status)
                     }
                     Text(scheduleSummary(config))
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundColor(.gray)
-                }
-                Spacer()
-                Toggle("", isOn: Binding(
-                    get: { config.isEnabled },
-                    set: { newValue in
-                        if newValue && !storeManager.canUseSchedule { requestPaywall(); return }
-                        scheduleManager.setEnabled(config.id, newValue)
+                        .font(Theme.mono(12))
+                        .foregroundColor(Theme.secondary)
+                        .lineLimit(2)
+                    if status == .blocking, let end = scheduleManager.activeWindowEnd(config, now: now) {
+                        Text("LOCKED UNTIL \(UIFormat.time.string(from: end).uppercased())")
+                            .font(Theme.mono(10, .bold))
+                            .foregroundColor(.white)
                     }
-                ))
-                .labelsHidden()
-                .tint(.white)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
-            .padding(16)
-            .overlay(Rectangle().stroke(Color.white.opacity(config.isEnabled ? 0.35 : 0.15), lineWidth: 1))
+            .buttonStyle(.plain)
+
+            Toggle("", isOn: Binding(
+                get: { config.isEnabled },
+                set: { newValue in
+                    if newValue && !storeManager.canUseSchedule { requestPaywall(); return }
+                    if let refused = scheduleManager.setEnabled(config.id, newValue) {
+                        refusalMessage = refused.message
+                    }
+                }
+            ))
+            .labelsHidden()
+            .toggleStyle(BrutalToggleStyle())
+            .accessibilityLabel("\(config.name) enabled")
         }
+        .padding(Theme.rowPadding)
+        .overlay(Rectangle().stroke(status == .blocking ? Color.white : (config.isEnabled ? Theme.hairlineStrong : Theme.hairline),
+                                    lineWidth: 1))
     }
 
     private func scheduleSummary(_ c: ScheduleConfig) -> String {
@@ -292,8 +510,11 @@ struct ScheduleEditorView: View {
     @State private var everyNWeeks: Int
     @State private var selection: FamilyActivitySelection
     @State private var showPicker = false
+    @State private var confirmDelete = false
+    @State private var refusalMessage: String?
 
     private let id: String
+    private static let maxNameLength = 24
 
     init(existing: ScheduleConfig?) {
         self.existing = existing
@@ -318,6 +539,11 @@ struct ScheduleEditorView: View {
         return end <= (startHour * 60 + startMinute) && end != 0
     }
 
+    /// Set while this schedule is blocking: then it is read-only.
+    private var refusal: ScheduleManager.ChangeRefusal? {
+        existing.flatMap { scheduleManager.refusal(for: $0.id) }
+    }
+
     /// iOS rejects monitoring intervals shorter than 15 minutes — validate here
     /// so the user gets a clear message instead of a generic system error.
     private var windowIssue: String? {
@@ -338,145 +564,204 @@ struct ScheduleEditorView: View {
         return nil
     }
 
-    private var canSave: Bool { appCount > 0 && !weekdays.isEmpty && windowIssue == nil }
+    /// What's still missing, so a disabled SAVE is never a mystery.
+    private var saveHint: String? {
+        if appCount == 0 { return "Pick at least one app to block." }
+        if weekdays.isEmpty { return "Pick at least one day." }
+        return windowIssue
+    }
+
+    private var canSave: Bool { saveHint == nil && refusal == nil }
 
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
+        NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
-                    Text(existing == nil ? "NEW SCHEDULE" : "EDIT SCHEDULE")
-                        .font(.system(size: 18, weight: .bold, design: .monospaced))
-                        .foregroundColor(.white)
-                        .padding(.top, 20)
-
-                    // Name
-                    VStack(alignment: .leading, spacing: 8) {
-                        SectionLabel(text: "NAME")
-                        TextField("", text: $name)
-                            .font(.system(size: 17, weight: .medium, design: .monospaced))
-                            .foregroundColor(.white)
-                            .tint(.white)
-                            .padding(14)
-                            .overlay(Rectangle().stroke(Color.white.opacity(0.2), lineWidth: 1))
+                    if let refusal {
+                        NoticeBanner(text: refusal.message)
                     }
 
-                    // Apps
-                    VStack(alignment: .leading, spacing: 8) {
-                        SectionLabel(text: "APPS TO BLOCK")
-                        Button(action: { showPicker = true }) {
-                            HStack {
-                                Text(appCount == 0 ? "None selected" : "\(appCount) selected")
-                                    .font(.system(size: 17, weight: .medium, design: .monospaced))
-                                    .foregroundColor(.white)
-                                Spacer()
-                                Text(">").foregroundColor(.gray)
-                                    .font(.system(size: 20, weight: .bold, design: .monospaced))
-                            }
-                            .padding(14)
-                            .overlay(Rectangle().stroke(Color.white.opacity(0.2), lineWidth: 1))
-                        }
+                    VStack(spacing: 24) {
+                        nameSection
+                        appsSection
+                        daysSection
+                        timeSection
+                        cadenceSection
                     }
-
-                    // Weekdays
-                    VStack(alignment: .leading, spacing: 8) {
-                        SectionLabel(text: "DAYS")
-                        HStack(spacing: 6) {
-                            ForEach(WeekdayHelper.ordered, id: \.weekday) { item in
-                                let on = weekdays.contains(item.weekday)
-                                Button(action: {
-                                    if on { weekdays.remove(item.weekday) } else { weekdays.insert(item.weekday) }
-                                }) {
-                                    Text(item.short)
-                                        .font(.system(size: 14, weight: .bold, design: .monospaced))
-                                        .foregroundColor(on ? .black : .gray)
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 13)
-                                        .background(on ? Color.white : Color.clear)
-                                        .overlay(Rectangle().stroke(Color.white.opacity(0.2), lineWidth: 1))
-                                }
-                            }
-                        }
-                        HStack(spacing: 10) {
-                            quickButton("WEEKDAYS") { weekdays = [2, 3, 4, 5, 6] }
-                            quickButton("EVERY DAY") { weekdays = Set(1...7) }
-                        }
-                    }
-
-                    // Time window
-                    VStack(alignment: .leading, spacing: 8) {
-                        SectionLabel(text: "TIME WINDOW")
-                        HStack(spacing: 12) {
-                            TimeWheel(title: "FROM", hour: $startHour, minute: $startMinute)
-                            TimeWheel(title: "TO", hour: $endHour, minute: $endMinute)
-                        }
-                        .frame(maxWidth: .infinity)
-                        if let issue = windowIssue {
-                            Text(issue)
-                                .font(.system(size: 11, design: .monospaced))
-                                .foregroundColor(.orange.opacity(0.9))
-                        } else if isOvernight {
-                            Text("Overnight window — ends next morning.")
-                                .font(.system(size: 11, design: .monospaced))
-                                .foregroundColor(.gray)
-                        }
-                    }
-
-                    // Cadence
-                    VStack(alignment: .leading, spacing: 8) {
-                        SectionLabel(text: "REPEAT")
-                        HStack {
-                            Text(everyNWeeks <= 1 ? "Every week" : "Every \(everyNWeeks) weeks")
-                                .font(.system(size: 16, weight: .medium, design: .monospaced))
-                                .foregroundColor(.white)
-                            Spacer()
-                            Stepper("", value: $everyNWeeks, in: 1...8).labelsHidden().tint(.white)
-                        }
-                        .padding(14)
-                        .overlay(Rectangle().stroke(Color.white.opacity(0.2), lineWidth: 1))
-                    }
-
-                    // Save
-                    Button(action: save) {
-                        Text("SAVE SCHEDULE")
-                            .font(.system(size: 17, weight: .bold, design: .monospaced))
-                            .foregroundColor(.black)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 18)
-                            .background(Color.white)
-                    }
-                    .disabled(!canSave)
-                    .opacity(canSave ? 1 : 0.5)
+                    .disabled(refusal != nil)
 
                     if existing != nil {
-                        Button(action: deleteSchedule) {
-                            Text("DELETE")
-                                .font(.system(size: 14, weight: .bold, design: .monospaced))
-                                .foregroundColor(.red.opacity(0.8))
+                        Button(role: .destructive) { confirmDelete = true } label: {
+                            Text("DELETE SCHEDULE")
+                                .font(Theme.mono(13, .bold))
+                                .foregroundColor(Theme.danger)
+                                .frame(maxWidth: .infinity, minHeight: 44)
                         }
+                        .disabled(refusal != nil)
+                        .opacity(refusal != nil ? 0.4 : 1)
                     }
-
-                    Color.clear.frame(height: 20)
                 }
-                .padding(.horizontal, 24)
+                .padding(.horizontal, Theme.gutter)
+                .padding(.vertical, 16)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .background(Color.black.ignoresSafeArea())
+            .safeAreaInset(edge: .bottom) { saveBar }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Color.black, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text(existing == nil ? "NEW SCHEDULE" : "EDIT SCHEDULE")
+                        .font(Theme.mono(15, .bold))
+                        .foregroundColor(.white)
+                }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("CLOSE") { dismiss() }
+                        .font(Theme.mono(13, .medium))
+                        .foregroundColor(Theme.secondary)
+                }
             }
         }
+        .presentationBackground(Color.black)
+        .presentationDragIndicator(.visible)
         .familyActivityPicker(isPresented: $showPicker, selection: $selection)
+        .confirmationDialog("Delete this schedule?", isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("Delete", role: .destructive, action: deleteSchedule)
+        }
+        .alert("LOCKED IN", isPresented: Binding(
+            get: { refusalMessage != nil },
+            set: { if !$0 { refusalMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: { Text(refusalMessage ?? "") }
+    }
+
+    // MARK: Sections
+
+    private var nameSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionLabel(text: "NAME")
+            TextField("", text: $name, prompt: Text("Focus block").foregroundColor(Theme.tertiary))
+                .font(Theme.mono(17, .medium))
+                .foregroundColor(.white)
+                .tint(.white)
+                .submitLabel(.done)
+                .autocorrectionDisabled()
+                .padding(14)
+                .overlay(Rectangle().stroke(Theme.hairline, lineWidth: 1))
+                .onChange(of: name) { _, new in
+                    if new.count > Self.maxNameLength { name = String(new.prefix(Self.maxNameLength)) }
+                }
+        }
+    }
+
+    private var appsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionLabel(text: "APPS TO BLOCK")
+            Button { showPicker = true } label: {
+                PickerRow(label: "SELECTED", value: appCount == 0 ? "None selected" : "\(appCount) selected",
+                          placeholder: appCount == 0)
+            }
+            .buttonStyle(OutlineButtonStyle())
+        }
+    }
+
+    private var daysSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionLabel(text: "DAYS")
+            HStack(spacing: 6) {
+                ForEach(WeekdayHelper.ordered, id: \.weekday) { item in
+                    let on = weekdays.contains(item.weekday)
+                    Button {
+                        if on { weekdays.remove(item.weekday) } else { weekdays.insert(item.weekday) }
+                    } label: {
+                        Text(item.short)
+                            .font(Theme.mono(14, .bold))
+                            .foregroundColor(on ? .black : Theme.secondary)
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .background(on ? Color.white : Color.clear)
+                            .overlay(Rectangle().stroke(Theme.hairline, lineWidth: 1))
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(Calendar.current.weekdaySymbols[item.weekday - 1])
+                    .accessibilityAddTraits(on ? .isSelected : [])
+                }
+            }
+            HStack(spacing: 10) {
+                quickButton("WEEKDAYS") { weekdays = [2, 3, 4, 5, 6] }
+                quickButton("WEEKENDS") { weekdays = [1, 7] }
+                quickButton("EVERY DAY") { weekdays = Set(1...7) }
+            }
+        }
+    }
+
+    private var timeSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionLabel(text: "TIME WINDOW")
+            HStack(spacing: 12) {
+                TimeWheel(title: "FROM", hour: $startHour, minute: $startMinute)
+                TimeWheel(title: "TO", hour: $endHour, minute: $endMinute)
+            }
+            .frame(maxWidth: .infinity)
+            if let issue = windowIssue {
+                Text(issue)
+                    .font(Theme.mono(11))
+                    .foregroundColor(Theme.warning)
+            } else if isOvernight {
+                Text("Overnight window — ends next morning.")
+                    .font(Theme.mono(11))
+                    .foregroundColor(Theme.secondary)
+            }
+        }
+    }
+
+    private var cadenceSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionLabel(text: "REPEAT")
+            HStack {
+                Text(everyNWeeks <= 1 ? "Every week" : "Every \(everyNWeeks) weeks")
+                    .font(Theme.mono(16, .medium))
+                    .foregroundColor(.white)
+                Spacer()
+                Stepper("Repeat every N weeks", value: $everyNWeeks, in: 1...8).labelsHidden()
+            }
+            .padding(14)
+            .overlay(Rectangle().stroke(Theme.hairline, lineWidth: 1))
+        }
+    }
+
+    private var saveBar: some View {
+        VStack(spacing: 6) {
+            Button("SAVE SCHEDULE", action: save)
+                .buttonStyle(PrimaryButtonStyle())
+                .disabled(!canSave)
+            if refusal == nil, let hint = saveHint {
+                Text(hint)
+                    .font(Theme.mono(10))
+                    .foregroundColor(Theme.tertiary)
+            }
+        }
+        .padding(.horizontal, Theme.gutter)
+        .padding(.vertical, 12)
+        .background(Color.black)
     }
 
     private func quickButton(_ label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(label)
-                .font(.system(size: 12, weight: .bold, design: .monospaced))
-                .foregroundColor(.gray)
-                .padding(.horizontal, 14).padding(.vertical, 10)
-                .overlay(Rectangle().stroke(Color.white.opacity(0.2), lineWidth: 1))
+                .font(Theme.mono(11, .bold))
+                .foregroundColor(Theme.secondary)
+                .padding(.horizontal, 12)
+                .frame(minHeight: 36)
         }
+        .buttonStyle(OutlineButtonStyle())
     }
 
     private func save() {
         var cfg = existing ?? ScheduleConfig(id: id)
-        cfg.name = name.isEmpty ? "Focus block" : name
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        cfg.name = trimmed.isEmpty ? "Focus block" : trimmed
         cfg.weekdays = weekdays.sorted()
         cfg.startHour = startHour
         cfg.startMinute = startMinute
@@ -488,12 +773,19 @@ struct ScheduleEditorView: View {
         if existing == nil || cfg.anchorEpoch == 0 {
             cfg.anchorEpoch = Date().timeIntervalSince1970
         }
-        scheduleManager.upsert(cfg, selection: selection)
+        // The window may have opened while the editor was up.
+        if let refused = scheduleManager.upsert(cfg, selection: selection) {
+            refusalMessage = refused.message
+            return
+        }
         dismiss()
     }
 
     private func deleteSchedule() {
-        scheduleManager.delete(id)
+        if let refused = scheduleManager.delete(id) {
+            refusalMessage = refused.message
+            return
+        }
         dismiss()
     }
 }
@@ -503,7 +795,9 @@ struct ScheduleEditorView: View {
 struct AIModeView: View {
     @ObservedObject var habit = HabitEngine.shared
     @ObservedObject var storeManager = StoreManager.shared
+    @ObservedObject var coach = AICoach.shared
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openURL) private var openURL
 
     var requestPaywall: () -> Void
 
@@ -526,96 +820,54 @@ struct AIModeView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
-                // Intro
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("PREDICT & PREVENT")
-                        .font(.system(size: 16, weight: .bold, design: .monospaced))
-                        .foregroundColor(.white)
-                    Text("We learn when you reach for distracting apps, then nudge you to lock in BEFORE the urge hits. On-device. Private.")
-                        .font(.system(size: 13, design: .monospaced))
-                        .foregroundColor(.gray)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(spacing: 16) {
+                intro
+                enableRow
 
-                // Enable
-                OutlineRow {
-                    HStack {
-                        Text("AI MODE")
-                            .font(.system(size: 16, weight: .bold, design: .monospaced))
-                            .foregroundColor(.white)
-                        Spacer()
-                        Toggle("", isOn: Binding(
-                            get: { habit.config.isEnabled },
-                            set: { v in
-                                if v && !storeManager.canUseAI { requestPaywall(); return }
-                                guard v else { enableAfterPicking = false; habit.setEnabled(false); return }
-                                // Turning AI on with nothing watched would be
-                                // normalized straight back to off, so pick apps
-                                // FIRST and enable once we have a selection.
-                                if watchedCount == 0 {
-                                    localSelection = habit.watchedSelection
-                                    enableAfterPicking = true
-                                    showPicker = true
-                                    return
-                                }
-                                habit.setEnabled(true)
-                            }
-                        ))
-                        .labelsHidden().tint(.white)
-                    }
-                }
-
-                // Watched apps
-                Button(action: {
+                Button {
                     localSelection = habit.watchedSelection
                     showPicker = true
-                }) {
-                    OutlineRow {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 5) {
-                                Text("APPS TO WATCH")
-                                    .font(.system(size: 12, design: .monospaced)).foregroundColor(.gray)
-                                Text(watchedCount == 0 ? "None selected" : "\(watchedCount) selected")
-                                    .font(.system(size: 17, weight: .medium, design: .monospaced))
-                                    .foregroundColor(.white)
-                            }
-                            Spacer()
-                            Text(">").foregroundColor(.gray)
-                                .font(.system(size: 20, weight: .bold, design: .monospaced))
-                        }
-                    }
+                } label: {
+                    PickerRow(label: "APPS TO WATCH", value: watchedCount == 0 ? "None selected" : "\(watchedCount) selected",
+                              placeholder: watchedCount == 0)
                 }
+                .buttonStyle(OutlineButtonStyle())
 
-                // Lead time + duration
                 HStack(spacing: 12) {
                     leadTimePicker
                     durationPicker
                 }
 
-                // Insight panel
-                insightPanel
+                if notificationsBlocked {
+                    NoticeBanner(text: "AI mode nudges you with a notification, so it can't do anything until notifications are allowed.",
+                                 actionTitle: "SETTINGS") {
+                        if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+                    }
+                }
+
+                todayPanel
+
+                if !habit.isLearning {
+                    weekPanel
+                    if coach.isAvailable { coachPanel }
+                }
 
                 if let warning = habit.lastBudgetWarning {
-                    Text(warning)
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundColor(.orange.opacity(0.9))
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    NoticeBanner(text: warning)
                 }
 
                 // A lock is only ever started by the user accepting a nudge —
                 // there is deliberately no button here that locks on one tap.
                 OutlineRow {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("NEXT NUDGE")
-                            .font(.system(size: 12, design: .monospaced))
-                            .foregroundColor(.gray)
+                        SectionLabel(text: "NEXT NUDGE")
                         Text(nudgeLabel)
-                            .font(.system(size: 16, weight: .medium, design: .monospaced))
+                            .font(Theme.mono(16, .medium))
                             .foregroundColor(.white)
-                        Text(nudgeCaption)
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundColor(notificationsBlocked ? .orange.opacity(0.9) : .gray)
+                        Text("Tap LOCK NOW on that notification to start a \(UIFormat.duration(habit.config.lockDurationSeconds)) lock. Nothing here locks you on its own.")
+                            .font(Theme.mono(11))
+                            .foregroundColor(Theme.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -624,23 +876,21 @@ struct AIModeView: View {
                     Text(storeManager.aiTrialsRemaining > 0
                          ? "FREE TRIAL: \(storeManager.aiTrialsRemaining)/\(TrialGate.limit) AI LOCKS LEFT"
                          : "TRIAL USED UP — AI MODE IS A PRO FEATURE")
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundColor(.gray.opacity(0.7))
+                        .font(Theme.mono(10))
+                        .foregroundColor(Theme.tertiary)
                 }
 
                 #if DEBUG
-                Button(action: { habit.resetLearning() }) {
-                    Text("🧪 Reset learning")
-                        .font(.system(size: 9, design: .monospaced))
-                        .foregroundColor(.red.opacity(0.6))
-                }
+                Button("🧪 Reset learning") { habit.resetLearning() }
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundColor(.red.opacity(0.6))
                 #endif
-
-                Color.clear.frame(height: 12)
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 4)
+            .padding(.horizontal, Theme.gutter)
+            .padding(.top, 8)
+            .padding(.bottom, 24)
         }
+        .scrollIndicators(.hidden)
         .familyActivityPicker(isPresented: $showPicker, selection: $localSelection)
         .onChange(of: showPicker) { _, isShowing in
             guard !isShowing else { return }
@@ -664,25 +914,65 @@ struct AIModeView: View {
         }
     }
 
+    // MARK: Sections
+
+    private var intro: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("PREDICT & PREVENT")
+                .font(Theme.mono(16, .bold))
+                .foregroundColor(.white)
+            Text("Learns, per weekday, when you reach for distracting apps — then nudges you to lock in before the urge hits. On-device. Private.")
+                .font(Theme.mono(12))
+                .foregroundColor(Theme.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var enableRow: some View {
+        OutlineRow {
+            HStack {
+                Text("AI MODE")
+                    .font(Theme.mono(16, .bold))
+                    .foregroundColor(.white)
+                Spacer()
+                Toggle("AI mode", isOn: Binding(
+                    get: { habit.config.isEnabled },
+                    set: { v in
+                        if v && !storeManager.canUseAI { requestPaywall(); return }
+                        guard v else { enableAfterPicking = false; habit.setEnabled(false); return }
+                        // Turning AI on with nothing watched would be
+                        // normalized straight back to off, so pick apps
+                        // FIRST and enable once we have a selection.
+                        if watchedCount == 0 {
+                            localSelection = habit.watchedSelection
+                            enableAfterPicking = true
+                            showPicker = true
+                            return
+                        }
+                        habit.setEnabled(true)
+                    }
+                ))
+                .labelsHidden()
+                .toggleStyle(BrutalToggleStyle())
+            }
+        }
+    }
+
     private var leadTimePicker: some View {
         VStack(alignment: .leading, spacing: 6) {
             SectionLabel(text: "NUDGE LEAD")
             Menu {
-                ForEach([5, 10, 15, 20, 30], id: \.self) { m in
+                Button("Auto — learns what works") {
+                    var c = habit.config; c.adaptiveLead = true; habit.updateConfig(c)
+                }
+                ForEach(LeadBandit.arms, id: \.self) { m in
                     Button("\(m) min before") {
-                        var c = habit.config; c.leadMinutes = m; habit.updateConfig(c)
+                        var c = habit.config; c.adaptiveLead = false; c.leadMinutes = m; habit.updateConfig(c)
                     }
                 }
             } label: {
-                HStack {
-                    Text("\(habit.config.leadMinutes) min")
-                        .font(.system(size: 16, weight: .medium, design: .monospaced))
-                        .foregroundColor(.white)
-                    Spacer()
-                    Text("▾").foregroundColor(.gray)
-                }
-                .padding(12)
-                .overlay(Rectangle().stroke(Color.white.opacity(0.2), lineWidth: 1))
+                menuLabel(habit.config.adaptiveLead ? "AUTO · \(habit.currentLead)m" : "\(habit.config.leadMinutes) min")
             }
         }
     }
@@ -691,76 +981,65 @@ struct AIModeView: View {
         VStack(alignment: .leading, spacing: 6) {
             SectionLabel(text: "LOCK FOR")
             Menu {
-                ForEach([(30, "30m", 1800), (60, "1h", 3600), (120, "2h", 7200), (180, "3h", 10800)], id: \.0) { item in
-                    Button(item.1) {
-                        var c = habit.config; c.lockDurationSeconds = item.2; habit.updateConfig(c)
+                ForEach([1800, 3600, 7200, 10800], id: \.self) { seconds in
+                    Button(UIFormat.duration(seconds)) {
+                        var c = habit.config; c.lockDurationSeconds = seconds; habit.updateConfig(c)
                     }
                 }
             } label: {
-                HStack {
-                    Text(durationLabel(habit.config.lockDurationSeconds))
-                        .font(.system(size: 16, weight: .medium, design: .monospaced))
-                        .foregroundColor(.white)
-                    Spacer()
-                    Text("▾").foregroundColor(.gray)
-                }
-                .padding(12)
-                .overlay(Rectangle().stroke(Color.white.opacity(0.2), lineWidth: 1))
+                menuLabel(UIFormat.duration(habit.config.lockDurationSeconds))
             }
         }
     }
 
-    private func durationLabel(_ s: Int) -> String {
-        s % 3600 == 0 ? "\(s / 3600)h" : "\(s / 60)m"
-    }
-
-    /// When the daily pre-cue will fire, mirroring NudgeScheduler's own math.
-    private var nudgeLabel: String {
-        guard habit.config.isEnabled else { return "AI mode is off" }
-        guard watchedCount > 0 else { return "Pick apps to watch first" }
-        guard !notificationsBlocked else { return "Notifications are off" }
-        let peak = habit.predictedPeakMinute
-            ?? habit.predictedPeakIndex.map { AIConfig.displayBinStartHour($0) * 60 }
-        guard let target = peak else { return "Still learning — no nudge yet" }
-        let fire = AIConfig.nudgeMinute(peakMinute: target, leadMinutes: habit.config.leadMinutes)
-        return "\(AIConfig.minuteLabel(fire)) daily"
-    }
-
-    /// Explains the state above, so the panel is never just a dead end.
-    private var nudgeCaption: String {
-        if notificationsBlocked {
-            return "AI mode nudges you through a notification, so it can't do anything until you allow notifications for FIFTEEN in Settings."
+    private func menuLabel(_ text: String) -> some View {
+        HStack {
+            Text(text)
+                .font(Theme.mono(15, .medium))
+                .foregroundColor(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            Spacer(minLength: 4)
+            Image(systemName: "chevron.up.chevron.down")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(Theme.tertiary)
         }
-        return "Tap LOCK NOW on that notification to start a \(durationLabel(habit.config.lockDurationSeconds)) lock. Nothing here locks you on its own."
+        .padding(.horizontal, 12)
+        .frame(minHeight: 48)
+        .overlay(Rectangle().stroke(Theme.hairline, lineWidth: 1))
+        .contentShape(Rectangle())
     }
 
-    private func refreshNotificationStatus() async {
-        notifStatus = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
-    }
-
-    private var insightPanel: some View {
+    /// Today's risk curve and peak.
+    private var todayPanel: some View {
         OutlineRow {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    SectionLabel(text: "YOUR HABIT MAP")
-                    Spacer()
-                    Text("\(habit.daysObserved)d learned")
-                        .font(.system(size: 11, design: .monospaced)).foregroundColor(.gray)
+                    SectionLabel(text: "TODAY'S RISK")
+                    Text("\(habit.daysObserved)D LEARNED")
+                        .font(Theme.mono(10, .medium))
+                        .foregroundColor(Theme.tertiary)
+                        .fixedSize()
                 }
 
                 if habit.isLearning {
-                    Text("Learning your habits… need \(habit.config.minObservationDays) days of data. Keep AI mode on.")
-                        .font(.system(size: 13, design: .monospaced))
-                        .foregroundColor(.gray)
-                } else if let peak = habit.predictedPeakLabel {
-                    Text("PEAK: \(peak)")
-                        .font(.system(size: 18, weight: .bold, design: .monospaced))
+                    Text("Learning your habits — \(habit.daysObserved)/\(habit.config.minObservationDays) days. Keep AI mode on.")
+                        .font(Theme.mono(13))
+                        .foregroundColor(Theme.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    ProgressBar(value: Double(habit.daysObserved) / Double(max(1, habit.config.minObservationDays)))
+                } else if let plan = habit.todayPlan {
+                    Text("PEAK \(AIConfig.minuteLabel(plan.peakMinute))")
+                        .font(Theme.mono(22, .bold))
                         .foregroundColor(.white)
-                    Text("You'll be nudged \(habit.config.leadMinutes) min before.")
-                        .font(.system(size: 12, design: .monospaced)).foregroundColor(.gray)
+                    Text("\(Int(plan.probability * 100))% chance of heavy use around then.")
+                        .font(Theme.mono(12))
+                        .foregroundColor(Theme.secondary)
                 } else {
-                    Text("No strong pattern yet — your usage is fairly even. We'll keep watching.")
-                        .font(.system(size: 13, design: .monospaced)).foregroundColor(.gray)
+                    Text("No reliable peak today — your usage is fairly even. Still watching.")
+                        .font(Theme.mono(13))
+                        .foregroundColor(Theme.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 histogram
@@ -769,25 +1048,134 @@ struct AIModeView: View {
     }
 
     private var histogram: some View {
-        let freqs = habit.frequencies
-        let peak = habit.predictedPeakIndex
+        let risk = habit.riskCurve
+        let peak = habit.todayPeakBin
         return HStack(alignment: .bottom, spacing: 2) {
             ForEach(0..<AIConfig.displayBins, id: \.self) { i in
-                let f = i < freqs.count ? freqs[i] : 0
+                let r = i < risk.count ? risk[i] : 0
                 let hour = AIConfig.displayBinStartHour(i)
                 VStack(spacing: 4) {
-                    RoundedRectangle(cornerRadius: 0)
+                    Rectangle()
                         .fill(peak == i ? Color.white : Color.white.opacity(0.3))
-                        .frame(height: max(3, CGFloat(f) * 64))
-                    // Label every 3rd hour to avoid clutter (6, 9, 12, …).
+                        .frame(height: max(2, CGFloat(r) * 64))
+                    // Label every 3rd hour to avoid clutter (9, 12, 15, …).
                     Text(hour % 3 == 0 ? "\(hour)" : " ")
-                        .font(.system(size: 9, design: .monospaced))
-                        .foregroundColor(.gray)
+                        .font(Theme.mono(8))
+                        .foregroundColor(Theme.tertiary)
+                        .fixedSize()
                 }
                 .frame(maxWidth: .infinity, alignment: .bottom)
             }
         }
-        .frame(height: 92, alignment: .bottom)
+        .frame(height: 84, alignment: .bottom)
+        .animation(.easeOut(duration: 0.3), value: risk)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(peak.map { "Highest risk around \(AIConfig.binLabel($0))" } ?? "No clear peak today")
+    }
+
+    /// One line per weekday: its own peak and how sure the model is.
+    private var weekPanel: some View {
+        let plans = habit.weeklyPlan
+        let names = Calendar.current.shortWeekdaySymbols
+        return OutlineRow {
+            VStack(alignment: .leading, spacing: 10) {
+                SectionLabel(text: "THIS WEEK")
+                ForEach(WeekdayHelper.ordered, id: \.weekday) { item in
+                    let plan = plans.first { $0.weekday == item.weekday }
+                    let isToday = item.weekday == habit.todayWeekday
+                    HStack(spacing: 10) {
+                        Text(names[item.weekday - 1].uppercased())
+                            .font(Theme.mono(12, .bold))
+                            .foregroundColor(isToday ? .white : Theme.secondary)
+                            .frame(width: 44, alignment: .leading)
+                        if let plan {
+                            Text(AIConfig.minuteLabel(plan.peakMinute))
+                                .font(Theme.mono(13, .medium))
+                                .foregroundColor(.white)
+                                .frame(width: 84, alignment: .leading)
+                            ProgressBar(value: plan.probability)
+                            Text("\(Int(plan.probability * 100))%")
+                                .font(Theme.mono(11))
+                                .foregroundColor(Theme.secondary)
+                                .frame(width: 40, alignment: .trailing)
+                        } else {
+                            Text("no clear habit")
+                                .font(Theme.mono(12))
+                                .foregroundColor(Theme.tertiary)
+                            Spacer()
+                        }
+                    }
+                    .frame(minHeight: 22)
+                }
+            }
+        }
+    }
+
+    private var coachPanel: some View {
+        OutlineRow {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    SectionLabel(text: "COACH · ON-DEVICE")
+                    Button(coach.isGenerating ? "THINKING…" : "REFRESH") {
+                        Task { await coach.refreshIfStale(facts: habit.coachFacts(), force: true) }
+                    }
+                    .font(Theme.mono(11, .bold))
+                    .foregroundColor(.white)
+                    .disabled(coach.isGenerating)
+                    .fixedSize()
+                }
+                if coach.isGenerating && coach.insight == nil {
+                    ProgressView().tint(.white)
+                }
+                Text(coach.insight ?? "Tap REFRESH for a personal read of your habit map.")
+                    .font(Theme.mono(13))
+                    .foregroundColor(coach.insight == nil ? Theme.secondary : .white)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let error = coach.lastError {
+                    Text(error)
+                        .font(Theme.mono(11))
+                        .foregroundColor(Theme.warning)
+                }
+            }
+        }
+        .task { await coach.refreshIfStale(facts: habit.coachFacts()) }
+    }
+
+    /// When today's nudge will fire, mirroring NudgeScheduler's own plan.
+    private var nudgeLabel: String {
+        guard habit.config.isEnabled else { return "AI mode is off" }
+        guard watchedCount > 0 else { return "Pick apps to watch first" }
+        guard !notificationsBlocked else { return "Notifications are off" }
+        if habit.isLearning { return "Still learning — no nudge yet" }
+        guard let plan = habit.todayPlan else { return "No nudge today" }
+        // An after-midnight peak can fire on the next calendar day.
+        let calendarToday = Calendar.current.component(.weekday, from: Date())
+        let day = plan.fireWeekday == calendarToday
+            ? "today"
+            : Calendar.current.weekdaySymbols[plan.fireWeekday - 1]
+        return "\(AIConfig.minuteLabel(plan.fireMinute)) \(day)"
+    }
+
+    private func refreshNotificationStatus() async {
+        notifStatus = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
+    }
+}
+
+/// Thin hairline progress bar in the house style.
+struct ProgressBar: View {
+    let value: Double
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Rectangle().fill(Color.white.opacity(0.12))
+                Rectangle().fill(Color.white)
+                    .frame(width: geo.size.width * CGFloat(min(max(value, 0), 1)))
+            }
+        }
+        .frame(height: 4)
+        .accessibilityElement()
+        .accessibilityValue("\(Int(min(max(value, 0), 1) * 100)) percent")
     }
 }
 

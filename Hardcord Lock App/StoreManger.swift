@@ -71,16 +71,11 @@ final class StoreManager: ObservableObject {
     }
 
     /// 记录完成一次锁定
-    func recordCompletedLock() {
+    func recordCompletedLock(source: String) {
         // AI 挑战锁在开始时已消耗 AI 试用，不占用手动（NOW）免费次数
-        if UserDefaults.standard.string(forKey: "activeLockSource") == "ai" {
-            UserDefaults.standard.removeObject(forKey: "activeLockSource")
-            return
-        }
+        guard source != "ai" else { return }
         completedLockCount += 1
         UserDefaults.standard.set(completedLockCount, forKey: "completedLockCount")
-        UserDefaults.standard.synchronize()
-        print("🔒 Completed locks: \(completedLockCount)")
     }
     
     deinit {

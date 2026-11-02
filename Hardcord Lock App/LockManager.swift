@@ -2,6 +2,11 @@
 //  LockManager.swift
 //  Hardcord Lock App
 //
+//  UI-facing state of the manual / AI lock. The truth lives in the App Group
+//  (ManualLockStore) and is judged by LockGuard's tamper-resistant clock, so
+//  changing the system time neither ends a lock early nor confuses the
+//  countdown.
+//
 
 import Foundation
 import Combine
@@ -10,250 +15,200 @@ import UserNotifications
 @MainActor
 final class LockManager: ObservableObject {
     static let shared = LockManager()
-    
+
     @Published var isLocked: Bool = false
     @Published var remainingSeconds: Int = 0
     @Published var totalLockedSeconds: Int = 0
+    /// Full length of the running lock, for progress display.
+    @Published private(set) var lockDuration: Int = 0
 
-    /// When the current lock ends (nil when not locked). For UI display.
-    var lockEndDate: Date? { lockEndTime }
-    
-    private var timer: Timer?
-    private var lockEndTime: Date?
-    private var lockStartTime: Date?  // 新增：记录锁定开始时间
+    /// When the current lock ends, for display. Derived from the tamper-resistant
+    /// remaining time, not the stored wall-clock end, so a moved clock can't skew it.
+    var lockEndDate: Date? {
+        isLocked ? Date().addingTimeInterval(TimeInterval(remainingSeconds)) : nil
+    }
+
     private var displayUpdateTimer: Timer?
-    
+
     private init() {
-        // 从 UserDefaults 读取累计锁定时间
         totalLockedSeconds = UserDefaults.standard.integer(forKey: "totalLockedSeconds")
-        
-        // 检查是否有未完成的锁定
-        checkPendingLock()
-        
-        // 请求通知权限
+        migrateLegacyLock()
+        refresh()
         requestNotificationPermission()
     }
-    
-    // MARK: - 开始锁定
-    
-    func startLock(duration: Int) {
+
+    // MARK: - Start
+
+    /// Adopt a lock AppBlocker has just applied.
+    func startLock(_ record: ManualLockRecord) {
         isLocked = true
-        remainingSeconds = duration
-        lockStartTime = Date()  // 记录开始时间
-        lockEndTime = Date().addingTimeInterval(TimeInterval(duration))
-        
-        // 保存锁定开始和结束时间
-        UserDefaults.standard.set(lockStartTime, forKey: "lockStartTime")
-        UserDefaults.standard.set(lockEndTime, forKey: "lockEndTime")
-        UserDefaults.standard.synchronize()
-        
-        // 启动显示更新计时器
+        lockDuration = Int(record.duration)
+        remainingSeconds = Int(record.duration)
         startDisplayTimer()
-        
-        // 安排本地通知（在锁定结束时）
-        scheduleNotification(in: duration)
-        
-        print("🔒 Lock started, duration: \(duration) seconds")
+        scheduleNotification(in: Int(record.duration))
     }
-    
-    // MARK: - 检查未完成的锁定
-    
-    private func checkPendingLock() {
-        guard let savedEndTime = UserDefaults.standard.object(forKey: "lockEndTime") as? Date else {
+
+    // MARK: - Re-sync (launch / foreground)
+
+    /// Reconcile with the stored lock: resume a running one, or finish one that
+    /// ended while the app wasn't running (crediting it exactly once).
+    func refresh() {
+        guard let record = ManualLockStore.load() else {
+            stopDisplayTimer()
+            if isLocked { isLocked = false; remainingSeconds = 0 }
             return
         }
-        
-        let now = Date()
-        if savedEndTime > now {
-            // 锁定仍在进行中
+        let remaining = LockGuard.remaining(record, at: TamperClock.now())
+        if remaining > 0 {
             isLocked = true
-            lockEndTime = savedEndTime
-            lockStartTime = UserDefaults.standard.object(forKey: "lockStartTime") as? Date
-            remainingSeconds = Int(savedEndTime.timeIntervalSince(now))
+            lockDuration = Int(record.duration)
+            remainingSeconds = Int(remaining.rounded(.up))
             startDisplayTimer()
-            print("🔒 Resuming lock, remaining: \(remainingSeconds) seconds")
         } else {
-            // 锁定已结束，计算并累加时间
-            if let savedStartTime = UserDefaults.standard.object(forKey: "lockStartTime") as? Date {
-                let lockedDuration = Int(savedEndTime.timeIntervalSince(savedStartTime))
-                if lockedDuration > 0 {
-                    totalLockedSeconds += lockedDuration
-                    UserDefaults.standard.set(totalLockedSeconds, forKey: "totalLockedSeconds")
-                    print("🔓 Detected completed lock, added time: \(lockedDuration) seconds")
-
-                    // 记录完成一次锁定（用于免费试用计数）
-                    Task { @MainActor in
-                        StoreManager.shared.recordCompletedLock()
-                    }
-                }
-            }
-            // 解除可能残留的屏蔽（处理跨天/多天锁在进程被杀后扩展未能清除的情况）
-            AppBlocker.shared.stopBlocking()
-            // 清理锁定状态
-            clearLockState()
+            finish(record)
         }
     }
-    
-    // MARK: - 显示更新计时器（每秒更新 UI）
-    
+
+    // MARK: - Display timer
+
     private func startDisplayTimer() {
-        displayUpdateTimer?.invalidate()
+        guard displayUpdateTimer == nil else { return }
         displayUpdateTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.updateDisplay()
+                self?.tick()
             }
         }
     }
-    
-    private func updateDisplay() {
-        guard let endTime = lockEndTime else {
-            endLock()
+
+    private func tick() {
+        guard let record = ManualLockStore.load() else {
+            stopDisplayTimer()
+            isLocked = false
+            remainingSeconds = 0
             return
         }
-        
-        let now = Date()
-        let remaining = Int(endTime.timeIntervalSince(now))
-        
+        let remaining = LockGuard.remaining(record, at: TamperClock.now())
         if remaining > 0 {
-            remainingSeconds = remaining
+            remainingSeconds = Int(remaining.rounded(.up))
         } else {
-            endLock()
+            finish(record)
         }
     }
-    
-    // MARK: - 结束锁定
-    
-    private func endLock() {
+
+    private func stopDisplayTimer() {
         displayUpdateTimer?.invalidate()
         displayUpdateTimer = nil
+    }
 
-        // 立即解除屏蔽（前台结束时不依赖扩展的 intervalDidEnd，后者可能延迟）
+    // MARK: - Finish
+
+    private func finish(_ record: ManualLockRecord) {
+        stopDisplayTimer()
+        // Lift immediately — don't wait on the extension's intervalDidEnd.
         AppBlocker.shared.stopBlocking()
+        ManualLockStore.clear()
 
-        // 计算实际锁定时间并累加
-        if let startTime = lockStartTime, let endTime = lockEndTime {
-            // 使用开始时间和结束时间计算实际锁定时长
-            let lockedDuration = Int(endTime.timeIntervalSince(startTime))
-            if lockedDuration > 0 {
-                totalLockedSeconds += lockedDuration
-                UserDefaults.standard.set(totalLockedSeconds, forKey: "totalLockedSeconds")
-                print("✅ Lock duration: \(lockedDuration) seconds, total: \(totalLockedSeconds) seconds")
-                
-                // 记录完成一次锁定（用于免费试用计数）
-                Task { @MainActor in
-                    StoreManager.shared.recordCompletedLock()
-                }
-            }
+        let lockedDuration = Int(record.duration)
+        if lockedDuration > 0 {
+            totalLockedSeconds += lockedDuration
+            UserDefaults.standard.set(totalLockedSeconds, forKey: "totalLockedSeconds")
+            StoreManager.shared.recordCompletedLock(source: record.source)
         }
-        
+
         isLocked = false
         remainingSeconds = 0
-        clearLockState()
-        
-        print("🔓 Lock ended! Total: \(totalLockedSeconds) seconds (\(formatTotalTime(totalLockedSeconds)))")
     }
-    
-    // MARK: - 清理锁定状态
-    
-    private func clearLockState() {
-        lockEndTime = nil
-        lockStartTime = nil
-        UserDefaults.standard.removeObject(forKey: "lockEndTime")
-        UserDefaults.standard.removeObject(forKey: "lockStartTime")
-        UserDefaults.standard.synchronize()
-    }
-    
-    // MARK: - 本地通知
-    
-    private func requestNotificationPermission() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
-            if granted {
-                print("✅ Notification permission granted")
-            } else if let error = error {
-                print("❌ Notification permission failed: \(error)")
-            }
+
+    /// v3 kept the lock in the app's private defaults, judged by the wall clock.
+    /// Carry a lock in flight across the upgrade instead of dropping it.
+    private func migrateLegacyLock() {
+        let std = UserDefaults.standard
+        guard let end = std.object(forKey: "lockEndTime") as? Date else { return }
+        defer {
+            std.removeObject(forKey: "lockEndTime")
+            std.removeObject(forKey: "lockStartTime")
+            std.removeObject(forKey: "activeLockSource")
+        }
+        guard ManualLockStore.load() == nil else { return }
+
+        let clock = TamperClock.now()
+        let start = std.object(forKey: "lockStartTime") as? Date ?? min(clock.wall, end)
+        var record = ManualLockRecord(duration: end.timeIntervalSince(start),
+                                      source: std.string(forKey: "activeLockSource") ?? "manual",
+                                      clock: clock)
+        record.startWall = start
+        record.endWall = end
+        // No boot ID: v3 never recorded one, so LockGuard judges this lock by
+        // the wall clock — exactly as v3 did, no stricter and no looser.
+        record.bootID = nil
+        ManualLockStore.save(record)
+        if let legacySelection = SelectionStore.load(forKey: StoreKeys.manualSelection) {
+            SelectionStore.save(legacySelection, forKey: StoreKeys.manualLockSelection)
         }
     }
-    
+
+    // MARK: - Notifications
+
+    private func requestNotificationPermission() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+    }
+
     private func scheduleNotification(in seconds: Int) {
         let content = UNMutableNotificationContent()
         content.title = "LOCK COMPLETE"
         content.body = "Your focus session has ended."
         content.sound = .default
         content.badge = NSNumber(value: 1)
-        
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: TimeInterval(seconds), repeats: false)
+
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: TimeInterval(max(1, seconds)), repeats: false)
         let request = UNNotificationRequest(identifier: "lockComplete", content: content, trigger: trigger)
-        
-        UNUserNotificationCenter.current().add(request) { error in
-            if let error = error {
-                print("❌ Notification scheduling failed: \(error)")
-            } else {
-                print("✅ Notification scheduled")
-            }
-        }
+        UNUserNotificationCenter.current().add(request)
     }
-    
-    // MARK: - 格式化时间
-    
+
+    // MARK: - Formatting
+
     func formatTime(_ seconds: Int) -> String {
         let hours = seconds / 3600
         let minutes = (seconds % 3600) / 60
         let secs = seconds % 60
-        
+
         if hours > 0 {
             return String(format: "%02d:%02d:%02d", hours, minutes, secs)
         } else {
             return String(format: "%02d:%02d", minutes, secs)
         }
     }
-    
+
     func formatTotalTime(_ seconds: Int) -> String {
         let minutes = seconds / 60
         return "\(minutes)m"
     }
-    
+
     // MARK: - Debug functions (development only)
     #if DEBUG
     func debugAddTime(seconds: Int) {
         totalLockedSeconds += seconds
         UserDefaults.standard.set(totalLockedSeconds, forKey: "totalLockedSeconds")
-        print("🧪 DEBUG: Added \(seconds) seconds, total: \(totalLockedSeconds) seconds")
     }
-    
+
     func debugResetTime() {
         totalLockedSeconds = 0
         UserDefaults.standard.set(0, forKey: "totalLockedSeconds")
-        print("🧪 DEBUG: Reset total time to 0")
     }
-    
+
     func debugSkipLock() {
-        displayUpdateTimer?.invalidate()
-        displayUpdateTimer = nil
-
-        // 跳过锁定也要立即解除屏蔽，否则应用会一直锁到原定结束时间
+        guard let record = ManualLockStore.load() else { return }
+        stopDisplayTimer()
         AppBlocker.shared.stopBlocking()
-
-        // Calculate locked time and add to total
-        if let startTime = lockStartTime {
-            let lockedDuration = Int(Date().timeIntervalSince(startTime))
-            if lockedDuration > 0 {
-                totalLockedSeconds += lockedDuration
-                UserDefaults.standard.set(totalLockedSeconds, forKey: "totalLockedSeconds")
-                print("🧪 DEBUG: This lock \(lockedDuration) seconds, total: \(totalLockedSeconds) seconds")
-            }
+        ManualLockStore.clear()
+        let elapsed = Int(record.duration) - remainingSeconds
+        if elapsed > 0 {
+            totalLockedSeconds += elapsed
+            UserDefaults.standard.set(totalLockedSeconds, forKey: "totalLockedSeconds")
         }
-        
-        // Record completed lock
-        Task { @MainActor in
-            StoreManager.shared.recordCompletedLock()
-        }
-        
+        StoreManager.shared.recordCompletedLock(source: record.source)
         isLocked = false
         remainingSeconds = 0
-        clearLockState()
-        
-        print("🧪 DEBUG: Lock skipped")
     }
     #endif
 }
