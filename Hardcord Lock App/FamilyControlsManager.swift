@@ -43,7 +43,7 @@ final class FamilyControlsManager: ObservableObject {
 
     private func apply(_ status: AuthorizationStatus) {
         switch status {
-        case .approved, .approvedWithDataAccess:
+        case .approved:
             isAuthorized = true
             hasResolvedStatus = true
         case .denied:
@@ -52,7 +52,12 @@ final class FamilyControlsManager: ObservableObject {
         case .notDetermined:
             isAuthorized = false
         @unknown default:
-            isAuthorized = false
+            // Newer SDKs add approval variants (e.g. `.approvedWithDataAccess`,
+            // absent before the iOS 26.4 SDK). Naming it would break builds on
+            // older Xcodes, so recognise approvals by name instead.
+            let approved = String(describing: status).hasPrefix("approved")
+            isAuthorized = approved
+            hasResolvedStatus = true
         }
     }
 
