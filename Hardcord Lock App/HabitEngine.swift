@@ -47,11 +47,12 @@ final class HabitEngine: ObservableObject {
     static let actionSkip = "AI_SKIP"
 
     private init() {
-        config = AIConfigStore.load()
+        let loaded = AIConfigStore.load()
+        config = loaded
         stats = AIStatsStore.load()
         model = HabitModelStore.load() ?? HabitModel()
         bandit = LeadBanditStore.load()
-        currentLead = config.leadMinutes
+        currentLead = loaded.leadMinutes
         watchedSelection = SelectionStore.load(forKey: StoreKeys.aiSelection) ?? FamilyActivitySelection()
     }
 
