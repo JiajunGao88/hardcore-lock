@@ -2,23 +2,21 @@
 //  HabitEngine.swift
 //  Hardcord Lock App
 //
-//  The "AI" mode. It is a fully on-device, transparent behavioral model:
+//  The "AI" mode — fully on-device:
 //
-//   1. LEARN  — monitor the user's watched apps across fixed time windows.
-//               The extension records a "heavy use" hit whenever the user spends
-//               ≥AIConfig.thresholdMinutes in those apps within a window
-//               (DeviceActivityEvent threshold).
-//   2. PREDICT— after a few days, the window(s) the user reliably over-uses become
-//               the predicted "peak" (frequency = hits / observed days).
-//   3. INTERVENE — schedule a notification a user-set lead time (10/15 min) BEFORE
-//               the peak window's cue, inviting the user to pre-commit to a lock.
-//               Acting before the cue is the core of habit change (cue → routine →
-//               reward): we add friction at the moment of temptation, on the user's
-//               own command — never an automatic, non-consensual lock.
+//   1. LEARN  — the monitor extension records a "heavy use" hit whenever the
+//               user spends ≥AIConfig.thresholdMinutes in the watched apps within
+//               a window, and every observed day as a trial (HabitModel).
+//   2. PREDICT— a hierarchical Bayesian model gives, per weekday and hour, the
+//               probability of heavy use with a confidence bound; each weekday
+//               with a confident habit gets its own predicted peak.
+//   3. INTERVENE — a nudge fires a lead time before each weekday's peak. A
+//               Thompson-sampling bandit learns which lead time the user actually
+//               acts on. A lock only ever starts when the user taps LOCK NOW.
+//   4. EXPLAIN — on iOS 26 devices with Apple Intelligence, AICoach turns the
+//               model's numbers into a short weekly insight (on-device LLM).
 //
-//  No usage data ever leaves the device. Apple sandboxes Screen Time usage data;
-//  on-device frequency analysis is both the compliant and the privacy-respecting
-//  way to do this.
+//  No usage data ever leaves the device.
 //
 
 import Foundation
@@ -33,6 +31,10 @@ final class HabitEngine: ObservableObject {
 
     @Published var config: AIConfig
     @Published var stats: AIStats
+    @Published private(set) var model: HabitModel
+    @Published private(set) var bandit: LeadBandit
+    /// Lead time nudges use today (the bandit's pinned pick, or the fixed one).
+    @Published private(set) var currentLead: Int
     @Published var watchedSelection: FamilyActivitySelection
     @Published var lastBudgetWarning: String?
 
@@ -47,36 +49,63 @@ final class HabitEngine: ObservableObject {
     private init() {
         config = AIConfigStore.load()
         stats = AIStatsStore.load()
+        model = HabitModelStore.load() ?? HabitModel()
+        bandit = LeadBanditStore.load()
+        currentLead = config.leadMinutes
         watchedSelection = SelectionStore.load(forKey: StoreKeys.aiSelection) ?? FamilyActivitySelection()
     }
 
     // MARK: - Derived prediction state
 
-    var frequencies: [Double] { stats.frequencies() }
-
     var isLearning: Bool { stats.daysObserved < config.minObservationDays }
 
     var daysObserved: Int { stats.daysObserved }
 
-    /// Index of the predicted peak window, or nil while learning / no clear peak.
-    var predictedPeakIndex: Int? {
-        AIPredictor.predictedPeakIndex(config: config, stats: stats)
+    /// One entry per weekday with a confident habit, Sunday first.
+    var weeklyPlan: [NudgePlan] {
+        AIPredictor.weeklyPlan(config: config, stats: stats, model: model, leadMinutes: currentLead)
+            .sorted { $0.weekday < $1.weekday }
     }
 
-    /// Precise peak minute-of-day once enough timestamps exist (nil otherwise).
-    var predictedPeakMinute: Int? {
-        guard predictedPeakIndex != nil else { return nil }
-        return AIPredictor.predictedPeakMinute(stats: stats)
-    }
+    /// The behavioral weekday right now (after midnight still counts as last night).
+    var todayWeekday: Int { BehavioralDay.slot(for: Date()).weekday }
 
-    /// Best available label: the precise time (e.g. "8:35 PM") when we have it,
-    /// otherwise the coarse 1-hour window while fine samples accumulate.
-    var predictedPeakLabel: String? {
-        guard let i = predictedPeakIndex else { return nil }
-        if let m = AIPredictor.predictedPeakMinute(stats: stats) {
-            return AIConfig.minuteLabel(m)
+    var todayPlan: NudgePlan? { weeklyPlan.first { $0.weekday == todayWeekday } }
+
+    /// Today's modelled probability of heavy use per display bin (hour).
+    var riskCurve: [Double] {
+        let weekday = todayWeekday
+        return (0..<AIConfig.displayBins).map {
+            model.estimate(weekday: weekday, hour: AIConfig.displayBinStartHour($0)).mean
         }
-        return AIConfig.binLabel(i)
+    }
+
+    /// Display bin of today's peak, for the histogram highlight.
+    var todayPeakBin: Int? {
+        guard let plan = todayPlan else { return nil }
+        let hour = plan.peakMinute / 60
+        return (0..<AIConfig.displayBins).first { AIConfig.displayBinStartHour($0) == hour }
+    }
+
+    /// Plain-language facts for the on-device coach. No app names — the
+    /// selection tokens are opaque, and the coach doesn't need them.
+    func coachFacts() -> String {
+        let days = Calendar.current.weekdaySymbols
+        var lines = ["Days observed: \(stats.daysObserved)."]
+        let plan = weeklyPlan
+        if plan.isEmpty {
+            lines.append("No confident daily pattern yet.")
+        } else {
+            for p in plan {
+                lines.append("\(days[p.weekday - 1]): heavy use usually starts around \(AIConfig.minuteLabel(p.peakMinute)), on \(Int(p.probability * 100))% of those days.")
+            }
+        }
+        if bandit.trials > 0 {
+            let accepted = Int((bandit.successes.reduce(0, +) - Double(LeadBandit.arms.count)).rounded())
+            lines.append("Nudges answered: \(bandit.trials); accepted: \(accepted).")
+            lines.append("Most effective nudge lead so far: \(bandit.bestMeanArm) minutes.")
+        }
+        return lines.joined(separator: "\n")
     }
 
     // MARK: - Watched apps
@@ -117,6 +146,7 @@ final class HabitEngine: ObservableObject {
     func resetLearning() {
         AIStatsStore.reset()
         stats = AIStats()
+        model = HabitModel()
         registeredSelection = nil
         Automation.reconcileAll()
     }
@@ -128,6 +158,9 @@ final class HabitEngine: ObservableObject {
     /// re-fire double-counting that a stop+restart on every foreground caused).
     func refresh() {
         stats = AIStatsStore.load()
+        model = HabitModelStore.loadOrMigrate()
+        bandit = LeadBanditStore.load()
+        currentLead = LeadBanditStore.todaysLead(config: config)
         watchedSelection = SelectionStore.load(forKey: StoreKeys.aiSelection) ?? watchedSelection
         // AI "on" with nothing to watch is a meaningless state (and can linger
         // from old builds' persisted config) — normalize it to OFF so the toggle

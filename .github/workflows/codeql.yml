@@ -1,0 +1,36 @@
+name: CodeQL
+
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "17 3 * * 1"   # weekly, Monday 03:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  analyze:
+    name: CodeQL (Swift)
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-xcode
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: swift
+          build-mode: manual
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project "Hardcord Lock App.xcodeproj" -scheme "Hardcord Lock App" \
+            -destination "generic/platform=iOS Simulator" \
+            CODE_SIGNING_ALLOWED=NO | xcbeautify --renderer github-actions
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:swift

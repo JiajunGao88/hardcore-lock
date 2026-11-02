@@ -1,0 +1,81 @@
+name: iOS CI
+
+on:
+  push:
+    branches: [main, "upgrade/**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ios-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PROJECT: Hardcord Lock App.xcodeproj
+  SCHEME: Hardcord Lock App
+  # Screen Time entitlements need a provisioning profile, so CI builds unsigned.
+  # That still compiles and links all three targets (app + both extensions).
+  NO_SIGNING: CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=
+  BEAUTIFY: xcbeautify --renderer github-actions
+
+jobs:
+  build-and-test:
+    name: Build & unit tests (Simulator)
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - id: xcode
+        uses: ./.github/actions/setup-xcode
+      - name: Build and test
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project "$PROJECT" -scheme "$SCHEME" \
+            -destination "id=${{ steps.xcode.outputs.simulator-id }}" \
+            -only-testing:"Hardcord Lock AppTests" \
+            -resultBundlePath TestResults.xcresult \
+            $NO_SIGNING | $BEAUTIFY
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TestResults
+          path: TestResults.xcresult
+          if-no-files-found: ignore
+
+  analyze:
+    name: Xcode Analyze
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-xcode
+      - name: Analyze
+        run: |
+          set -o pipefail
+          xcodebuild analyze \
+            -project "$PROJECT" -scheme "$SCHEME" \
+            -destination "generic/platform=iOS Simulator" \
+            $NO_SIGNING | $BEAUTIFY
+
+  release-build:
+    name: Release build (device, unsigned)
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-xcode
+      # Catches Release-only breakage (#if DEBUG paths, optimizer issues)
+      # before an archive does.
+      - name: Build Release for iOS devices
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project "$PROJECT" -scheme "$SCHEME" \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            $NO_SIGNING | $BEAUTIFY

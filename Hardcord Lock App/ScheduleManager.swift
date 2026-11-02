@@ -67,7 +67,24 @@ final class ScheduleManager: ObservableObject {
 
     // MARK: - CRUD
 
-    func upsert(_ config: ScheduleConfig, selection: FamilyActivitySelection) {
+    /// Why a change to a schedule was refused (nil = allowed).
+    enum ChangeRefusal: Equatable {
+        /// The schedule is blocking right now; it can be changed after `until`.
+        case committed(until: Date?)
+    }
+
+    /// A schedule that is blocking can't be switched off, edited or deleted
+    /// until its window ends — otherwise a "hardcore" block is one toggle away
+    /// from nothing. Outside its window everything is editable.
+    func refusal(for id: String, now: Date = Date()) -> ChangeRefusal? {
+        guard let config = schedules.first(where: { $0.id == id }),
+              status(config, now: now) == .blocking else { return nil }
+        return .committed(until: activeWindowEnd(config, now: now))
+    }
+
+    @discardableResult
+    func upsert(_ config: ScheduleConfig, selection: FamilyActivitySelection) -> ChangeRefusal? {
+        if let refused = refusal(for: config.id) { return refused }
         saveSelection(selection, for: config.id)
         if let idx = schedules.firstIndex(where: { $0.id == config.id }) {
             schedules[idx] = config
@@ -75,23 +92,31 @@ final class ScheduleManager: ObservableObject {
             schedules.append(config)
         }
         persistAndReconcile()
+        return nil
     }
 
-    func delete(_ id: String) {
+    @discardableResult
+    func delete(_ id: String) -> ChangeRefusal? {
+        if let refused = refusal(for: id) { return refused }
         // Clear any active shield this schedule owns before we forget about it,
         // otherwise the apps could stay blocked with no way to reach them.
         Shielder.clear(Stores.schedule(id))
         schedules.removeAll { $0.id == id }
         SelectionStore.remove(forKey: StoreKeys.scheduleSelection(id))
         persistAndReconcile()
+        return nil
     }
 
-    func setEnabled(_ id: String, _ enabled: Bool) {
-        guard let idx = schedules.firstIndex(where: { $0.id == id }) else { return }
+    @discardableResult
+    func setEnabled(_ id: String, _ enabled: Bool) -> ChangeRefusal? {
+        guard let idx = schedules.firstIndex(where: { $0.id == id }) else { return nil }
+        // Switching ON is always allowed; switching OFF mid-block is not.
+        if !enabled, let refused = refusal(for: id) { return refused }
         schedules[idx].isEnabled = enabled
         // Re-anchor parity to "this week is on" whenever a schedule is switched on.
         if enabled { schedules[idx].anchorEpoch = Date().timeIntervalSince1970 }
         persistAndReconcile()
+        return nil
     }
 
     private func persistAndReconcile() {
@@ -125,6 +150,20 @@ final class ScheduleManager: ObservableObject {
             guard minutesNow >= config.startMinutes, minutesNow < endM else { return false }
             return inWindowOnDay(wd, morningHalf: false)
         }
+    }
+
+    /// When the window `config` is currently inside ends, or nil if not inside one.
+    func activeWindowEnd(_ config: ScheduleConfig, now: Date = Date()) -> Date? {
+        guard isActiveNow(config, now: now) else { return nil }
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: now)
+        let minutesNow = cal.component(.hour, from: now) * 60 + cal.component(.minute, from: now)
+        let tomorrow = cal.date(byAdding: .day, value: 1, to: today) ?? today
+        if config.endsAtMidnight { return tomorrow }
+        // Evening half of an overnight window ends tomorrow; same-day windows
+        // and the morning half end today.
+        let endDay = (config.isOvernight && minutesNow >= config.startMinutes) ? tomorrow : today
+        return cal.date(bySettingHour: config.endHour, minute: config.endMinute, second: 0, of: endDay)
     }
 
     // MARK: - Status (what the row badge shows)

@@ -11,7 +11,6 @@
 		46B721D6FFA8AB991A8E2969 /* ScheduleManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 905AD40F4F36DFCF99A44D89 /* ScheduleManager.swift */; };
 		584CA7BD2F16EF1200251A11 /* Hardcord_Lock_AppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 584CA7BC2F16EF1200251A11 /* Hardcord_Lock_AppApp.swift */; };
 		584CA7BF2F16EF1200251A11 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 584CA7BE2F16EF1200251A11 /* ContentView.swift */; };
-		584CA7C12F16EF1200251A11 /* Item.swift in Sources */ = {isa = PBXBuildFile; fileRef = 584CA7C02F16EF1200251A11 /* Item.swift */; };
 		584CA7C32F16EF1500251A11 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 584CA7C22F16EF1500251A11 /* Assets.xcassets */; };
 		584CA7C62F16EF1500251A11 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 584CA7C52F16EF1500251A11 /* Preview Assets.xcassets */; };
 		584CA7D02F16EF1500251A11 /* Hardcord_Lock_AppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 584CA7CF2F16EF1500251A11 /* Hardcord_Lock_AppTests.swift */; };
@@ -36,6 +35,11 @@
 		AAAF203DDFBC0A429E11D530 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44DACD0786CFDB08511D04E6 /* AppDelegate.swift */; };
 		B4B025B77A0031C3134439E9 /* SharedKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36C7677B999A8656E1503E18 /* SharedKit.swift */; };
 		E9083625FC4561BBA25CE329 /* BlockModesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EA5B887DDBA495B549E500F /* BlockModesView.swift */; };
+		8EE464F829B31F7A524B730D /* LockGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96CDF75D280DF92AF55A0B93 /* LockGuard.swift */; };
+		DDB6B44FE6E77BC473B85EFB /* LockGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96CDF75D280DF92AF55A0B93 /* LockGuard.swift */; };
+		55F2E5CAFCA21B4F23197B25 /* HabitModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5706B403FA0D23FA5309547B /* HabitModel.swift */; };
+		83C3C54359ADD287C067F0E4 /* HabitModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5706B403FA0D23FA5309547B /* HabitModel.swift */; };
+		E76B18E7266FF0783A5B87A7 /* AICoach.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A7E3348FD8F2F6ABAE8BA56 /* AICoach.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -93,7 +97,6 @@
 		584CA7B92F16EF1200251A11 /* Hardcord Lock App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Hardcord Lock App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		584CA7BC2F16EF1200251A11 /* Hardcord_Lock_AppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Hardcord_Lock_AppApp.swift; sourceTree = "<group>"; };
 		584CA7BE2F16EF1200251A11 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		584CA7C02F16EF1200251A11 /* Item.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Item.swift; sourceTree = "<group>"; };
 		584CA7C22F16EF1500251A11 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		584CA7C52F16EF1500251A11 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		584CA7CB2F16EF1500251A11 /* Hardcord Lock AppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Hardcord Lock AppTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -122,6 +125,9 @@
 		584CA81C2F16F59B00251A11 /* AppBlocker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBlocker.swift; sourceTree = "<group>"; };
 		5EA5B887DDBA495B549E500F /* BlockModesView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BlockModesView.swift; sourceTree = "<group>"; };
 		905AD40F4F36DFCF99A44D89 /* ScheduleManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ScheduleManager.swift; sourceTree = "<group>"; };
+		96CDF75D280DF92AF55A0B93 /* LockGuard.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LockGuard.swift; sourceTree = "<group>"; };
+		5706B403FA0D23FA5309547B /* HabitModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HabitModel.swift; sourceTree = "<group>"; };
+		3A7E3348FD8F2F6ABAE8BA56 /* AICoach.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AICoach.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -202,7 +208,6 @@
 				584CA7E82F16F08600251A11 /* Hardcord Lock App.entitlements */,
 				584CA7BC2F16EF1200251A11 /* Hardcord_Lock_AppApp.swift */,
 				584CA7BE2F16EF1200251A11 /* ContentView.swift */,
-				584CA7C02F16EF1200251A11 /* Item.swift */,
 				584CA7C22F16EF1500251A11 /* Assets.xcassets */,
 				584CA7C42F16EF1500251A11 /* Preview Content */,
 				584CA8162F16F53A00251A11 /* StoreManger.swift */,
@@ -214,6 +219,9 @@
 				00AE854238E1E600A7F9BBF1 /* HabitEngine.swift */,
 				5EA5B887DDBA495B549E500F /* BlockModesView.swift */,
 				44DACD0786CFDB08511D04E6 /* AppDelegate.swift */,
+				96CDF75D280DF92AF55A0B93 /* LockGuard.swift */,
+				5706B403FA0D23FA5309547B /* HabitModel.swift */,
+				3A7E3348FD8F2F6ABAE8BA56 /* AICoach.swift */,
 			);
 			path = "Hardcord Lock App";
 			sourceTree = "<group>";
@@ -468,7 +476,6 @@
 			files = (
 				584CA81D2F16F59B00251A11 /* AppBlocker.swift in Sources */,
 				584CA7BF2F16EF1200251A11 /* ContentView.swift in Sources */,
-				584CA7C12F16EF1200251A11 /* Item.swift in Sources */,
 				584CA81B2F16F58000251A11 /* LockManager.swift in Sources */,
 				584CA7BD2F16EF1200251A11 /* Hardcord_Lock_AppApp.swift in Sources */,
 				584CA8172F16F53B00251A11 /* StoreManger.swift in Sources */,
@@ -478,6 +485,9 @@
 				727B3CEAB22ECC3C1092FEF5 /* HabitEngine.swift in Sources */,
 				E9083625FC4561BBA25CE329 /* BlockModesView.swift in Sources */,
 				AAAF203DDFBC0A429E11D530 /* AppDelegate.swift in Sources */,
+				8EE464F829B31F7A524B730D /* LockGuard.swift in Sources */,
+				55F2E5CAFCA21B4F23197B25 /* HabitModel.swift in Sources */,
+				E76B18E7266FF0783A5B87A7 /* AICoach.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -504,6 +514,8 @@
 			files = (
 				584CA7F52F16F12E00251A11 /* DeviceActivityMonitorExtension.swift in Sources */,
 				B4B025B77A0031C3134439E9 /* SharedKit.swift in Sources */,
+				DDB6B44FE6E77BC473B85EFB /* LockGuard.swift in Sources */,
+				83C3C54359ADD287C067F0E4 /* HabitModel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -680,12 +692,17 @@
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UIUserInterfaceStyle = Dark;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 3.1;
+				OTHER_LDFLAGS = (
+					"-weak_framework",
+					FoundationModels,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.bluewave.hardcorelock;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -715,12 +732,17 @@
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UIUserInterfaceStyle = Dark;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 3.1;
+				OTHER_LDFLAGS = (
+					"-weak_framework",
+					FoundationModels,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.bluewave.hardcorelock;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";

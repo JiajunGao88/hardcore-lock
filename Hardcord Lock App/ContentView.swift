@@ -23,15 +23,18 @@ struct ContentView: View {
     @State private var showAppPicker = false
     @State private var showDurationPicker = false
     @State private var selectedDuration: Int = 900 // 15 分钟
+    @State private var confirmLock = false
     @State private var showDevAlert = false
     @State private var devAlertMessage = ""
-    @State private var showErrorAlert = false
-    @State private var errorMessage = ""
-    @State private var showMinDurationNotice = false
-    @State private var minDurationNoticeText = ""
+    @State private var errorMessage: String?
     /// Fullscreen countdown is the default face of an active lock; the user can
     /// step out to manage Schedule/AI and come back. Reset when a lock starts.
     @State private var showFullShield = true
+    /// Snapshot of AppGroup.isConfigured (a filesystem call) taken on foreground.
+    @State private var appGroupOK = true
+    @State private var preventUninstall = HardcoreSettings.preventUninstall
+    /// Bumped when a lock starts — drives the heavy haptic.
+    @State private var lockStartedCount = 0
 
     enum PaywallIntent {
         case manualLock
@@ -55,10 +58,9 @@ struct ContentView: View {
 
     @State private var currentTaunt: String = "Stay focused."
 
-    // 时长选项（包含 OTHER）
-    private let durationOptions: [(label: String, value: Int)] = [
-        ("15m", 900), ("30m", 1800), ("1h", 3600), ("3h", 10800),
-        ("6h", 21600), ("12h", 43200), ("OTHER", -1)
+    private let durationPresets: [(label: String, value: Int)] = [
+        ("15m", 900), ("30m", 1800), ("1h", 3600),
+        ("3h", 10800), ("6h", 21600), ("12h", 43200)
     ]
 
     var body: some View {
@@ -67,10 +69,18 @@ struct ContentView: View {
 
             if lockManager.isLocked && showFullShield {
                 shieldView
+                    .transition(.opacity)
             } else {
                 mainContent
+                    .transition(.opacity)
             }
         }
+        .animation(.easeInOut(duration: 0.25), value: lockManager.isLocked && showFullShield)
+        // Every system control (sheets, alerts, menus, wheels, the app picker)
+        // must render dark: in light mode they showed white-on-white.
+        .preferredColorScheme(.dark)
+        .tint(.white)
+        .sensoryFeedback(.impact(weight: .heavy), trigger: lockStartedCount)
         .sheet(isPresented: $showPaywall) {
             PaywallView(onPurchaseSuccess: handlePaywallSuccess)
         }
@@ -79,15 +89,19 @@ struct ContentView: View {
             selection: $familyControls.selectedApps
         )
         .sheet(isPresented: $showDurationPicker) {
-            durationPickerSheet
-                .onDisappear { showCustomPicker = false }
+            DurationPickerSheet(selectedDuration: $selectedDuration, presets: durationPresets)
+        }
+        .confirmationDialog(lockConfirmTitle, isPresented: $confirmLock, titleVisibility: .visible) {
+            Button("LOCK NOW", role: .destructive, action: proceedWithLock)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Ends around \(UIFormat.time.string(from: Date().addingTimeInterval(TimeInterval(selectedDuration)))). There is no unlock button.")
         }
         .onAppear {
             currentTaunt = tauntingMessages.randomElement() ?? "Stay focused."
-            familyControls.refreshAuthorizationStatus()
-            if !familyControls.isAuthorized {
-                requestAuthorization()
-            }
+            // Ask once on first launch. After a denial, the banner explains and
+            // offers to ask again — no surprise prompts on every launch.
+            if !familyControls.hasResolvedStatus { requestAuthorization() }
             refreshAutomation()
             // The nudge is now the ONLY way an AI lock starts, so a request that
             // arrived before this view existed (cold launch from the notification)
@@ -112,65 +126,85 @@ struct ContentView: View {
         .alert("DEV", isPresented: $showDevAlert) {
             Button("OK", role: .cancel) {}
         } message: { Text(devAlertMessage) }
-        .alert("ERROR", isPresented: $showErrorAlert) {
+        .alert("ERROR", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
             Button("OK", role: .cancel) {}
-        } message: { Text(errorMessage) }
-        .alert("NOTICE", isPresented: $showMinDurationNotice) {
-            Button("OK", role: .cancel) {}
-        } message: { Text(minDurationNoticeText) }
+        } message: { Text(errorMessage ?? "") }
     }
 
-    // MARK: - 主界面（含模式切换）
+    // MARK: - Main screen (with mode switch)
 
     private var mainContent: some View {
         VStack(spacing: 0) {
             header
+            healthBanners
             ModePickerBar(mode: $selectedMode)
-                .padding(.top, 20)
+                .padding(.top, 16)
                 .padding(.bottom, 8)
 
-            switch selectedMode {
-            case .now:
-                nowModeContent
-            case .schedule:
-                ScheduleModeView(requestPaywall: { presentProPaywall() })
-            case .ai:
-                AIModeView(requestPaywall: { presentProPaywall() })
+            Group {
+                switch selectedMode {
+                case .now:
+                    if lockManager.isLocked { lockedNowContent } else { idleNowContent }
+                case .schedule:
+                    ScheduleModeView(requestPaywall: { presentProPaywall() })
+                case .ai:
+                    AIModeView(requestPaywall: { presentProPaywall() })
+                }
             }
+            .frame(maxHeight: .infinity, alignment: .top)
         }
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        HStack(alignment: .firstTextBaseline) {
             Text("FIFTEEN")
-                .font(.system(size: 32, weight: .bold, design: .monospaced))
+                .font(Theme.mono(30, .bold))
                 .foregroundColor(.white)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 50)
-                .padding(.horizontal, 24)
-
-            VStack(alignment: .leading, spacing: 2) {
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
                 Text("TIME SAVED")
-                    .font(.system(size: 11, weight: .regular, design: .monospaced))
-                    .foregroundColor(.gray)
-                Text(lockManager.formatTotalTime(lockManager.totalLockedSeconds))
-                    .font(.system(size: 26, weight: .bold, design: .monospaced))
+                    .font(Theme.mono(10, .medium))
+                    .foregroundColor(Theme.secondary)
+                Text(UIFormat.duration(lockManager.totalLockedSeconds))
+                    .font(Theme.mono(20, .bold))
                     .foregroundColor(.white)
+                    .contentTransition(.numericText())
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, 16)
-            .padding(.horizontal, 24)
+            .accessibilityElement(children: .combine)
+        }
+        .padding(.top, 12)
+        .padding(.horizontal, Theme.gutter)
+    }
+
+    /// Problems that make blocking silently not work, said out loud.
+    @ViewBuilder
+    private var healthBanners: some View {
+        let authProblem = familyControls.hasResolvedStatus && !familyControls.isAuthorized
+        if authProblem || !appGroupOK {
+            VStack(spacing: 8) {
+                if authProblem {
+                    NoticeBanner(
+                        text: lockManager.isLocked
+                            ? "SCREEN TIME ACCESS WAS TURNED OFF. Your lock is no longer being enforced."
+                            : "Screen Time access is off — nothing can be blocked until you allow it.",
+                        isError: true,
+                        actionTitle: "ALLOW"
+                    ) { requestAuthorization() }
+                }
+                if !appGroupOK {
+                    NoticeBanner(text: "Setup problem: the App Group isn't configured, so schedules and AI can't run in the background.",
+                                 isError: true)
+                }
+            }
+            .padding(.horizontal, Theme.gutter)
+            .padding(.top, 12)
         }
     }
 
-    // MARK: - NOW 模式（原手动锁定）
-
-    private var nowModeContent: some View {
-        if lockManager.isLocked {
-            return AnyView(lockedNowContent)
-        }
-        return AnyView(idleNowContent)
-    }
+    // MARK: - NOW mode
 
     /// NOW tab while a lock is running: the pickers and LOCK button make no
     /// sense (the manual store is busy), so show a clean countdown card instead.
@@ -180,128 +214,130 @@ struct ContentView: View {
 
             VStack(spacing: 14) {
                 Text("LOCK RUNNING")
-                    .font(.system(size: 11, weight: .regular, design: .monospaced))
-                    .foregroundColor(.gray)
-                Text(lockManager.formatTime(lockManager.remainingSeconds))
-                    .font(.system(size: 44, weight: .bold, design: .monospaced))
-                    .foregroundColor(.white)
-                    .minimumScaleFactor(0.5)
-                    .lineLimit(1)
+                    .font(Theme.mono(11, .medium))
+                    .foregroundColor(Theme.secondary)
+                countdownText(size: 44)
+                ProgressBar(value: lockProgress)
+                    .padding(.horizontal, 32)
                 if let end = lockManager.lockEndDate {
-                    Text("ENDS AT \(Self.endTimeFormatter.string(from: end).uppercased())")
-                        .font(.system(size: 12, weight: .regular, design: .monospaced))
-                        .foregroundColor(.gray)
+                    Text("ENDS AT \(UIFormat.time.string(from: end).uppercased())")
+                        .font(Theme.mono(12))
+                        .foregroundColor(Theme.secondary)
                 }
-                Button(action: { showFullShield = true }) {
+                Button { showFullShield = true } label: {
                     Text("FULLSCREEN")
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .foregroundColor(.gray)
-                        .padding(.horizontal, 16).padding(.vertical, 10)
-                        .overlay(Rectangle().stroke(Color.white.opacity(0.2), lineWidth: 1))
+                        .font(Theme.mono(11, .bold))
+                        .foregroundColor(Theme.secondary)
+                        .padding(.horizontal, 16)
+                        .frame(minHeight: 40)
                 }
+                .buttonStyle(OutlineButtonStyle())
                 .padding(.top, 6)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 36)
-            .overlay(Rectangle().stroke(Color.white.opacity(0.2), lineWidth: 1))
-            .padding(.horizontal, 24)
+            .overlay(Rectangle().stroke(Theme.hairline, lineWidth: 1))
+            .padding(.horizontal, Theme.gutter)
 
             Spacer()
 
             Text("SCHEDULE & AI STAY AVAILABLE ABOVE")
-                .font(.system(size: 10, weight: .regular, design: .monospaced))
-                .foregroundColor(.gray.opacity(0.5))
-                .padding(.bottom, 30)
+                .font(Theme.mono(10))
+                .foregroundColor(Theme.tertiary)
+                .padding(.bottom, 24)
         }
     }
 
-    private static let endTimeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.timeStyle = .short
-        f.dateStyle = .none
-        return f
-    }()
-
     private var idleNowContent: some View {
-        VStack(spacing: 0) {
-            Spacer()
-
-            VStack(spacing: 16) {
-                Button(action: { showAppPicker = true }) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("APPS TO BLOCK")
-                                .font(.system(size: 10, weight: .regular, design: .monospaced))
-                                .foregroundColor(.gray)
-                            Text(appsSelectedText)
-                                .font(.system(size: 16, weight: .medium, design: .monospaced))
-                                .foregroundColor(.white)
-                        }
-                        Spacer()
-                        Text(">")
-                            .font(.system(size: 20, weight: .bold, design: .monospaced))
-                            .foregroundColor(.gray)
-                    }
-                    .padding(16)
-                    .background(RoundedRectangle(cornerRadius: 0).stroke(Color.white.opacity(0.2), lineWidth: 1))
+        ScrollView {
+            VStack(spacing: 12) {
+                Button { showAppPicker = true } label: {
+                    PickerRow(label: "APPS TO BLOCK", value: appsSelectedText, placeholder: !hasSelectionToBlock)
                 }
-                .padding(.horizontal, 24)
+                .buttonStyle(OutlineButtonStyle())
 
-                Button(action: { showDurationPicker = true }) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("DURATION")
-                                .font(.system(size: 10, weight: .regular, design: .monospaced))
-                                .foregroundColor(.gray)
-                            Text(formatDuration(selectedDuration))
-                                .font(.system(size: 16, weight: .medium, design: .monospaced))
-                                .foregroundColor(.white)
-                        }
-                        Spacer()
-                        Text(">")
-                            .font(.system(size: 20, weight: .bold, design: .monospaced))
-                            .foregroundColor(.gray)
-                    }
-                    .padding(16)
-                    .background(RoundedRectangle(cornerRadius: 0).stroke(Color.white.opacity(0.2), lineWidth: 1))
+                Button { showDurationPicker = true } label: {
+                    PickerRow(label: "DURATION", value: UIFormat.duration(selectedDuration))
                 }
-                .padding(.horizontal, 24)
-            }
+                .buttonStyle(OutlineButtonStyle())
 
-            Spacer()
+                uninstallRow
 
-            Button(action: handleLockPress) {
-                Text("LOCK")
-                    .font(.system(size: 24, weight: .bold, design: .monospaced))
-                    .foregroundColor(.black)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 20)
-                    .background(Color.white)
+                #if DEBUG
+                debugControls
+                #endif
             }
-            .padding(.horizontal, 24)
-            .disabled(!hasSelectionToBlock)
-            .opacity(!hasSelectionToBlock ? 0.5 : 1)
+            .padding(.horizontal, Theme.gutter)
+            .padding(.top, 8)
+            .padding(.bottom, 16)
+        }
+        .scrollIndicators(.hidden)
+        .safeAreaInset(edge: .bottom) { lockBar }
+    }
+
+    private var lockBar: some View {
+        VStack(spacing: 8) {
+            Button("LOCK") { confirmLock = true }
+                .buttonStyle(PrimaryButtonStyle())
+                .disabled(!hasSelectionToBlock)
 
             Group {
-                if storeManager.purchasedPro {
-                    Text("PRO: UNLIMITED")
+                if !hasSelectionToBlock {
+                    Text("PICK APPS TO BLOCK FIRST")
+                } else if storeManager.purchasedPro {
+                    Text("PRO · UNLIMITED")
                 } else {
                     Text("FREE LOCKS LEFT: \(storeManager.freeLocksRemaining)/\(storeManager.freeLockLimitValue)")
                 }
             }
-            .font(.system(size: 10, weight: .regular, design: .monospaced))
-            .foregroundColor(.gray.opacity(0.7))
-            .padding(.top, 10)
+            .font(Theme.mono(10))
+            .foregroundColor(Theme.tertiary)
 
             Text("NO ESCAPE. NO REFUNDS.")
-                .font(.system(size: 10, weight: .regular, design: .monospaced))
-                .foregroundColor(.gray.opacity(0.5))
-                .padding(.top, 10)
-                .padding(.bottom, 30)
+                .font(Theme.mono(10))
+                .foregroundColor(Theme.tertiary.opacity(0.7))
+        }
+        .padding(.horizontal, Theme.gutter)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
+        .background(Color.black)
+    }
 
-            #if DEBUG
-            debugControls
-            #endif
+    /// Any schedule blocking right now? Then deletion protection can't be
+    /// switched off — its store would drop it on the next reconcile.
+    private var anyScheduleBlocking: Bool {
+        scheduleManager.schedules.contains { scheduleManager.status($0) == .blocking }
+    }
+
+    private var uninstallRow: some View {
+        OutlineRow {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("BLOCK APP DELETION")
+                        .font(Theme.mono(13, .bold))
+                        .foregroundColor(.white)
+                    Text(anyScheduleBlocking && preventUninstall
+                         ? "Locked on while a schedule is blocking."
+                         : "While a block is on, no app can be deleted — not even FIFTEEN.")
+                        .font(Theme.mono(11))
+                        .foregroundColor(Theme.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                Toggle("Block app deletion", isOn: Binding(
+                    get: { preventUninstall },
+                    set: { value in
+                        // Enforced here too, not only via .disabled: accessibility
+                        // actions can still reach a disabled control.
+                        guard value || !anyScheduleBlocking else { return }
+                        HardcoreSettings.preventUninstall = value
+                        preventUninstall = value
+                    }
+                ))
+                .labelsHidden()
+                .toggleStyle(BrutalToggleStyle())
+                .disabled(anyScheduleBlocking && preventUninstall)
+            }
         }
     }
 
@@ -325,14 +361,14 @@ struct ContentView: View {
 
                 Button(action: {
                     storeManager.debugSetLockCompleted()
-                    devAlertMessage = "✅ Set 1 lock completed\nNext lock will show Paywall"; showDevAlert = true
+                    devAlertMessage = "✅ Set 3 locks completed\nNext lock will show Paywall"; showDevAlert = true
                 }) { debugTag("Use Free", .yellow) }
             }
 
             HStack(spacing: 12) {
                 Button(action: {
                     lockManager.debugAddTime(seconds: 900)
-                    devAlertMessage = "✅ +15 min\nTotal: \(lockManager.formatTotalTime(lockManager.totalLockedSeconds))"; showDevAlert = true
+                    devAlertMessage = "✅ +15 min"; showDevAlert = true
                 }) { debugTag("+15min", .cyan) }
 
                 Button(action: {
@@ -340,8 +376,15 @@ struct ContentView: View {
                     devAlertMessage = "✅ Time reset to 0"; showDevAlert = true
                 }) { debugTag("Reset Time", .red) }
             }
+
+            if let beat = Heartbeat.last {
+                Text("ext: \(beat.event) @ \(UIFormat.time.string(from: beat.at))")
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundColor(.gray)
+                    .lineLimit(1)
+            }
         }
-        .padding(.bottom, 10)
+        .padding(.top, 8)
     }
 
     private func debugTag(_ text: String, _ color: Color) -> some View {
@@ -353,43 +396,71 @@ struct ContentView: View {
     }
     #endif
 
-    // MARK: - Shield 界面（锁定中）
+    // MARK: - Shield (fullscreen, while locked)
+
+    private var lockProgress: Double {
+        guard lockManager.lockDuration > 0 else { return 0 }
+        return 1 - Double(lockManager.remainingSeconds) / Double(lockManager.lockDuration)
+    }
+
+    private func countdownText(size: CGFloat) -> some View {
+        Text(lockManager.formatTime(lockManager.remainingSeconds))
+            .font(Theme.mono(size, .bold))
+            .foregroundColor(.white)
+            .minimumScaleFactor(0.4)
+            .lineLimit(1)
+            .contentTransition(.numericText(countsDown: true))
+            .animation(.easeOut(duration: 0.2), value: lockManager.remainingSeconds)
+            .accessibilityLabel("Time remaining \(UIFormat.duration(lockManager.remainingSeconds))")
+    }
 
     private var shieldView: some View {
-        VStack(spacing: 32) {
+        VStack(spacing: 0) {
             Spacer()
-            Text(lockManager.formatTime(lockManager.remainingSeconds))
-                .font(.system(size: 48, weight: .bold, design: .monospaced))
-                .foregroundColor(.white)
-                .minimumScaleFactor(0.5)
-                .lineLimit(1)
+
+            countdownText(size: 56)
+                .padding(.horizontal, Theme.gutter)
+
+            ProgressBar(value: lockProgress)
+                .frame(width: 200)
+                .padding(.top, 20)
+
+            if let end = lockManager.lockEndDate {
+                Text("ENDS AT \(UIFormat.time.string(from: end).uppercased())")
+                    .font(Theme.mono(12))
+                    .foregroundColor(Theme.tertiary)
+                    .padding(.top, 12)
+            }
+
             Text(currentTaunt)
-                .font(.system(size: 16, weight: .medium, design: .monospaced))
-                .foregroundColor(.gray)
+                .font(Theme.mono(16, .medium))
+                .foregroundColor(Theme.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
+                .padding(.top, 36)
+                .id(currentTaunt)
+                .transition(.opacity)
+
             Spacer()
 
             // Quiet exit: the lock keeps running, but Schedule/AI stay reachable.
-            Button(action: { showFullShield = false }) {
+            Button { showFullShield = false } label: {
                 Text("MANAGE SCHEDULE & AI →")
-                    .font(.system(size: 11, weight: .medium, design: .monospaced))
-                    .foregroundColor(.gray.opacity(0.7))
-                    .padding(.horizontal, 16).padding(.vertical, 10)
-                    .overlay(Rectangle().stroke(Color.white.opacity(0.15), lineWidth: 1))
+                    .font(Theme.mono(11, .medium))
+                    .foregroundColor(Theme.secondary)
+                    .padding(.horizontal, 16)
+                    .frame(minHeight: 44)
             }
+            .buttonStyle(OutlineButtonStyle())
             .padding(.bottom, 16)
 
             Text("// NO UNLOCK BUTTON")
-                .font(.system(size: 10, weight: .regular, design: .monospaced))
-                .foregroundColor(.gray.opacity(0.3))
+                .font(Theme.mono(10))
+                .foregroundColor(Theme.tertiary.opacity(0.6))
                 .padding(.bottom, 20)
 
             #if DEBUG
-            Button(action: {
-                AppBlocker.shared.stopBlocking()
-                lockManager.debugSkipLock()
-            }) {
+            Button(action: { lockManager.debugSkipLock() }) {
                 Text("🧪 DEV: Skip Lock")
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundColor(.red.opacity(0.6))
@@ -400,144 +471,37 @@ struct ContentView: View {
             #endif
         }
         .onReceive(AppClock.everyTenSeconds) { _ in
-            currentTaunt = tauntingMessages.randomElement() ?? "Stay focused."
-        }
-    }
-
-    // MARK: - 时长选择器
-
-    @State private var customDays: Int = 0
-    @State private var customHours: Int = 0
-    @State private var customMinutes: Int = 30
-    @State private var showCustomPicker: Bool = false
-
-    private var durationPickerSheet: some View {
-        VStack(spacing: 0) {
-            Text("SELECT DURATION")
-                .font(.system(size: 14, weight: .bold, design: .monospaced))
-                .foregroundColor(.white)
-                .padding(.top, 24).padding(.bottom, 16)
-
-            if !showCustomPicker {
-                ScrollView {
-                    VStack(spacing: 0) {
-                        ForEach(Array(durationOptions.enumerated()), id: \.offset) { _, option in
-                            Button(action: {
-                                if option.value == -1 {
-                                    showCustomPicker = true
-                                } else {
-                                    selectedDuration = option.value
-                                    showDurationPicker = false
-                                }
-                            }) {
-                                HStack {
-                                    Text(option.label)
-                                        .font(.system(size: 18, weight: .medium, design: .monospaced))
-                                        .foregroundColor(.white)
-                                    Spacer()
-                                    if selectedDuration == option.value && option.value != -1 {
-                                        Text("✓")
-                                            .font(.system(size: 18, weight: .bold, design: .monospaced))
-                                            .foregroundColor(.white)
-                                    }
-                                }
-                                .padding(.horizontal, 24).padding(.vertical, 16)
-                            }
-                        }
-                        Spacer().frame(height: 16)
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .frame(maxHeight: .infinity)
-            } else {
-                VStack(spacing: 16) {
-                    Text("CUSTOM DURATION")
-                        .font(.system(size: 12, weight: .bold, design: .monospaced))
-                        .foregroundColor(.gray)
-
-                    HStack(spacing: 16) {
-                        customWheel(title: "DAYS", range: 0..<30, selection: $customDays)
-                        customWheel(title: "HOURS", range: 0..<24, selection: $customHours)
-                        customWheel(title: "MINUTES", range: 0..<60, selection: $customMinutes)
-                    }
-                    .frame(maxWidth: .infinity)
-
-                    Button(action: {
-                        var totalSeconds = (customDays * 86400) + (customHours * 3600) + (customMinutes * 60)
-                        guard totalSeconds > 0 else { return }
-                        let minDurationSeconds = 15 * 60
-                        if totalSeconds < minDurationSeconds {
-                            totalSeconds = minDurationSeconds
-                            minDurationNoticeText = "Minimum duration is 15 minutes.\nAdjusted to 15m."
-                            showMinDurationNotice = true
-                        }
-                        selectedDuration = totalSeconds
-                        showDurationPicker = false
-                        showCustomPicker = false
-                    }) {
-                        Text("CONFIRM")
-                            .font(.system(size: 16, weight: .bold, design: .monospaced))
-                            .foregroundColor(.black)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(Color.white)
-                    }
-                    .padding(.horizontal, 24)
-
-                    Button(action: { showCustomPicker = false }) {
-                        Text("BACK")
-                            .font(.system(size: 12, weight: .regular, design: .monospaced))
-                            .foregroundColor(.gray)
-                    }
-                }
-                .padding(.horizontal, 24)
-                .frame(maxHeight: .infinity, alignment: .top)
+            withAnimation(.easeInOut(duration: 0.4)) {
+                currentTaunt = tauntingMessages.randomElement() ?? "Stay focused."
             }
         }
-        .background(Color.black)
-        .presentationDetents([.large])
     }
 
-    private func customWheel(title: String, range: Range<Int>, selection: Binding<Int>) -> some View {
-        VStack(spacing: 8) {
-            Text(title)
-                .font(.system(size: 11, weight: .regular, design: .monospaced))
-                .foregroundColor(.gray)
-            Picker(title, selection: selection) {
-                ForEach(range, id: \.self) { v in
-                    Text("\(v)")
-                        .font(.system(size: 22, weight: .medium, design: .monospaced))
-                        .foregroundColor(.white).tag(v)
-                }
-            }
-            .pickerStyle(.wheel).frame(height: 150)
-        }
-    }
+    // MARK: - Helpers
 
-    // MARK: - 辅助方法
+    /// "2 apps + 1 category" — the selection without the word "selected".
+    private var selectionSummary: String {
+        let s = familyControls.selectedApps
+        let apps = s.applicationTokens.count
+        let cats = s.categoryTokens.count
+        let webs = s.webDomainTokens.count
+        var parts: [String] = []
+        if apps > 0 { parts.append("\(apps) app\(apps > 1 ? "s" : "")") }
+        if cats > 0 { parts.append("\(cats) categor\(cats > 1 ? "ies" : "y")") }
+        if webs > 0 { parts.append("\(webs) site\(webs > 1 ? "s" : "")") }
+        return parts.joined(separator: " + ")
+    }
 
     private var appsSelectedText: String {
-        let appCount = familyControls.selectedApps.applicationTokens.count
-        let categoryCount = familyControls.selectedApps.categoryTokens.count
-        let total = appCount + categoryCount
-        if total == 0 { return "None selected" }
-        var parts: [String] = []
-        if appCount > 0 { parts.append("\(appCount) app\(appCount > 1 ? "s" : "")") }
-        if categoryCount > 0 { parts.append("\(categoryCount) categor\(categoryCount > 1 ? "ies" : "y")") }
-        return parts.joined(separator: " + ") + " selected"
+        hasSelectionToBlock ? selectionSummary : "None selected"
     }
 
     private var hasSelectionToBlock: Bool {
-        !familyControls.selectedApps.applicationTokens.isEmpty ||
-        !familyControls.selectedApps.categoryTokens.isEmpty
+        !SelectionStore.isEmpty(familyControls.selectedApps)
     }
 
-    private func formatDuration(_ seconds: Int) -> String {
-        let hours = seconds / 3600
-        let minutes = (seconds % 3600) / 60
-        if hours > 0 && minutes > 0 { return "\(hours)h \(minutes)m" }
-        else if hours > 0 { return "\(hours)h" }
-        else { return "\(minutes)m" }
+    private var lockConfirmTitle: String {
+        "Lock \(selectionSummary) for \(UIFormat.duration(selectedDuration))?"
     }
 
     // MARK: - Automation refresh
@@ -545,10 +509,14 @@ struct ContentView: View {
     private func refreshAutomation() {
         // 清掉"锁定完成"通知留下的角标
         UNUserNotificationCenter.current().setBadgeCount(0)
-        // Defensive: if no manual/AI lock is active, make sure no stale manual
-        // shield lingers (e.g. from a cross-midnight or multi-day lock whose
-        // process was killed before its timer could clear it).
-        if !lockManager.isLocked {
+        familyControls.refreshAuthorizationStatus()
+        appGroupOK = AppGroup.isConfigured
+        // Finish (credit + unshield) a lock that ended while we were away. The
+        // tamper-resistant clock decides — a moved system clock doesn't count.
+        lockManager.refresh()
+        // Defensive: no lock on record → no manual shield should linger (e.g. a
+        // pre-v4 lock whose process was killed before it could clear itself).
+        if ManualLockStore.load() == nil {
             AppBlocker.shared.stopBlocking()
         }
         Automation.reconcileAll()
@@ -575,23 +543,19 @@ struct ContentView: View {
 
     // MARK: - Manual lock flow
 
-    private func handleLockPress() {
+    /// Runs after the user confirms the lock dialog.
+    private func proceedWithLock() {
         guard familyControls.isAuthorized else {
             Task {
                 do {
                     try await familyControls.requestAuthorization()
                     if familyControls.isAuthorized { proceedWithLock() }
                 } catch {
-                    errorMessage = "Screen Time access is required.\nPlease enable it in Settings > Screen Time."
-                    showErrorAlert = true
+                    errorMessage = "Screen Time access is required.\nEnable it in Settings > Screen Time."
                 }
             }
             return
         }
-        proceedWithLock()
-    }
-
-    private func proceedWithLock() {
         if storeManager.canStartLock {
             startLock()
         } else {
@@ -601,9 +565,7 @@ struct ContentView: View {
     }
 
     private func startLock() {
-        if performLock(selection: familyControls.selectedApps, duration: selectedDuration) {
-            UserDefaults.standard.set("manual", forKey: "activeLockSource")
-        }
+        performLock(selection: familyControls.selectedApps, duration: selectedDuration, source: "manual")
     }
 
     // MARK: - AI challenge flow
@@ -615,8 +577,7 @@ struct ContentView: View {
         habitEngine.pendingChallenge = false
         // Never let an AI nudge hijack/reset a lock that is already running.
         guard !lockManager.isLocked else {
-            errorMessage = "A lock is already running.\nIt ends at \(lockManager.lockEndDate.map { Self.endTimeFormatter.string(from: $0) } ?? "—")."
-            showErrorAlert = true
+            errorMessage = "A lock is already running.\nIt ends at \(lockManager.lockEndDate.map { UIFormat.time.string(from: $0) } ?? "—")."
             return
         }
         let sel = habitEngine.watchedSelection
@@ -641,8 +602,7 @@ struct ContentView: View {
                     try await familyControls.requestAuthorization()
                     if familyControls.isAuthorized { startAILock(selection: sel, duration: duration) }
                 } catch {
-                    errorMessage = "Screen Time access is required.\nPlease enable it in Settings > Screen Time."
-                    showErrorAlert = true
+                    errorMessage = "Screen Time access is required.\nEnable it in Settings > Screen Time."
                 }
             }
             return
@@ -652,25 +612,24 @@ struct ContentView: View {
     }
 
     private func startAILock(selection: FamilyActivitySelection, duration: Int) {
-        // 只有锁真正启动成功才消耗试用次数、打上来源标记
-        if performLock(selection: selection, duration: duration) {
+        // 只有锁真正启动成功才消耗试用次数
+        if performLock(selection: selection, duration: duration, source: "ai") {
             storeManager.recordAIUse()
-            UserDefaults.standard.set("ai", forKey: "activeLockSource")
         }
     }
 
     // MARK: - Shared lock starter
 
     @discardableResult
-    private func performLock(selection: FamilyActivitySelection, duration: Int) -> Bool {
+    private func performLock(selection: FamilyActivitySelection, duration: Int, source: String) -> Bool {
         do {
-            try AppBlocker.shared.startBlocking(apps: selection, duration: TimeInterval(duration))
-            lockManager.startLock(duration: duration)
+            let record = try AppBlocker.shared.startBlocking(apps: selection, duration: TimeInterval(duration), source: source)
+            lockManager.startLock(record)
+            showFullShield = true
+            lockStartedCount += 1
             return true
         } catch {
-            errorMessage = "Start lock failed:\n\(error.localizedDescription)"
-            showErrorAlert = true
-            print("❌ Lock start failed: \(error)")
+            errorMessage = "Couldn't start the lock:\n\(error.localizedDescription)"
             return false
         }
     }
@@ -680,13 +639,150 @@ struct ContentView: View {
             do {
                 try await familyControls.requestAuthorization()
             } catch {
-                print("❌ Authorization failed: \(error)")
+                errorMessage = "Screen Time access is required.\nEnable it in Settings > Screen Time."
             }
         }
     }
 }
 
-// MARK: - Paywall 视图
+// MARK: - Duration picker
+
+private struct DurationPickerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var selectedDuration: Int
+    let presets: [(label: String, value: Int)]
+
+    @State private var showCustom = false
+    @State private var detent: PresentationDetent = .medium
+    @State private var customDays = 0
+    @State private var customHours = 0
+    @State private var customMinutes = 30
+
+    private static let minSeconds = 15 * 60
+
+    private var customSeconds: Int { customDays * 86_400 + customHours * 3600 + customMinutes * 60 }
+    private var isCustomSelected: Bool { !presets.contains { $0.value == selectedDuration } }
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if showCustom { customPicker } else { presetGrid }
+            }
+            .frame(maxHeight: .infinity, alignment: .top)
+            .background(Color.black.ignoresSafeArea())
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Color.black, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text(showCustom ? "CUSTOM DURATION" : "DURATION")
+                        .font(Theme.mono(15, .bold))
+                        .foregroundColor(.white)
+                }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(showCustom ? "BACK" : "CLOSE") {
+                        if showCustom {
+                            withAnimation { showCustom = false }
+                            detent = .medium
+                        } else {
+                            dismiss()
+                        }
+                    }
+                    .font(Theme.mono(13, .medium))
+                    .foregroundColor(Theme.secondary)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large], selection: $detent)
+        .presentationBackground(Color.black)
+        .presentationDragIndicator(.visible)
+    }
+
+    private var presetGrid: some View {
+        ScrollView {
+            VStack(spacing: 10) {
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10),
+                                    GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                    ForEach(presets, id: \.value) { option in
+                        let selected = selectedDuration == option.value
+                        Button {
+                            selectedDuration = option.value
+                            dismiss()
+                        } label: {
+                            Text(option.label)
+                                .font(Theme.mono(20, .bold))
+                                .foregroundColor(selected ? .black : .white)
+                                .frame(maxWidth: .infinity, minHeight: 64)
+                                .background(selected ? Color.white : Color.clear)
+                        }
+                        .buttonStyle(OutlineButtonStyle())
+                        .accessibilityAddTraits(selected ? .isSelected : [])
+                    }
+                }
+
+                Button {
+                    withAnimation { showCustom = true }
+                    detent = .large
+                } label: {
+                    Text(isCustomSelected ? "CUSTOM · \(UIFormat.duration(selectedDuration).uppercased())" : "CUSTOM…")
+                        .font(Theme.mono(15, .bold))
+                        .foregroundColor(isCustomSelected ? .black : .white)
+                        .frame(maxWidth: .infinity, minHeight: 56)
+                        .background(isCustomSelected ? Color.white : Color.clear)
+                }
+                .buttonStyle(OutlineButtonStyle())
+            }
+            .padding(Theme.gutter)
+        }
+    }
+
+    private var customPicker: some View {
+        VStack(spacing: 20) {
+            HStack(spacing: 12) {
+                wheel(title: "DAYS", range: 0..<30, selection: $customDays)
+                wheel(title: "HOURS", range: 0..<24, selection: $customHours)
+                wheel(title: "MIN", range: 0..<60, selection: $customMinutes)
+            }
+            .frame(maxWidth: .infinity)
+
+            // Said inline, not in an alert: an alert fired while the sheet
+            // dismisses attaches to a view that is going away and never shows.
+            Text(customSeconds < Self.minSeconds
+                 ? "MINIMUM IS 15 MINUTES"
+                 : "= \(UIFormat.duration(customSeconds).uppercased())")
+                .font(Theme.mono(13, .medium))
+                .foregroundColor(customSeconds < Self.minSeconds ? Theme.warning : Theme.secondary)
+
+            Button("CONFIRM") {
+                selectedDuration = customSeconds
+                dismiss()
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .disabled(customSeconds < Self.minSeconds)
+        }
+        .padding(Theme.gutter)
+    }
+
+    private func wheel(title: String, range: Range<Int>, selection: Binding<Int>) -> some View {
+        VStack(spacing: 8) {
+            Text(title)
+                .font(Theme.mono(11, .medium))
+                .foregroundColor(Theme.secondary)
+            Picker(title, selection: selection) {
+                ForEach(range, id: \.self) { v in
+                    Text("\(v)")
+                        .font(Theme.mono(22, .medium))
+                        .foregroundColor(.white)
+                        .tag(v)
+                }
+            }
+            .pickerStyle(.wheel)
+            .frame(height: 150)
+            .clipped()
+        }
+    }
+}
+
+// MARK: - Paywall
 
 struct PaywallView: View {
     @StateObject private var storeManager = StoreManager.shared
@@ -699,6 +795,13 @@ struct PaywallView: View {
 
     var onPurchaseSuccess: () -> Void
 
+    private let features = [
+        "UNLIMITED NOW LOCKS",
+        "AUTOMATIC SCHEDULES",
+        "AI PREDICT & PREVENT",
+        "EVERY FUTURE UPDATE"
+    ]
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
@@ -706,65 +809,64 @@ struct PaywallView: View {
             VStack(spacing: 0) {
                 Spacer()
 
-                VStack(spacing: 16) {
-                    Text("🎉").font(.system(size: 48))
-                    Text("GO PRO")
-                        .font(.system(size: 28, weight: .bold, design: .monospaced))
+                VStack(alignment: .leading, spacing: 20) {
+                    Text("FIFTEEN PRO")
+                        .font(Theme.mono(30, .bold))
                         .foregroundColor(.white)
-                    Text("UNLIMITED LOCKS · SCHEDULES · AI MODE")
-                        .font(.system(size: 12, weight: .medium, design: .monospaced))
-                        .foregroundColor(.gray)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 24)
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(features, id: \.self) { feature in
+                            HStack(spacing: 12) {
+                                Rectangle().fill(Color.white).frame(width: 8, height: 8)
+                                Text(feature)
+                                    .font(Theme.mono(14, .medium))
+                                    .foregroundColor(.white)
+                            }
+                        }
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, Theme.gutter)
 
                 Spacer()
 
-                VStack(spacing: 24) {
-                    Text("ONE TIME. FOREVER.")
-                        .font(.system(size: 16, weight: .bold, design: .monospaced))
-                        .foregroundColor(.white)
-                    VStack(spacing: 8) {
-                        Text(storeManager.product?.displayPrice ?? "$2.99")
-                            .font(.system(size: 48, weight: .bold, design: .monospaced))
-                            .foregroundColor(.white)
-                        Text("NO SUBSCRIPTION")
-                            .font(.system(size: 12, weight: .medium, design: .monospaced))
-                            .foregroundColor(.gray)
+                VStack(spacing: 6) {
+                    Group {
+                        if let price = storeManager.product?.displayPrice {
+                            Text(price)
+                                .font(Theme.mono(48, .bold))
+                                .foregroundColor(.white)
+                        } else {
+                            ProgressView().tint(.white).frame(height: 57)
+                        }
                     }
+                    Text("ONE TIME · NO SUBSCRIPTION")
+                        .font(Theme.mono(11, .medium))
+                        .foregroundColor(Theme.secondary)
                 }
 
                 Spacer()
 
                 Button(action: purchase) {
                     if storeManager.isLoading {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .black))
-                            .frame(maxWidth: .infinity).padding(.vertical, 20).background(Color.white)
+                        ProgressView().tint(.black)
                     } else {
                         Text("UNLOCK FOREVER")
-                            .font(.system(size: 18, weight: .bold, design: .monospaced))
-                            .foregroundColor(.black)
-                            .frame(maxWidth: .infinity).padding(.vertical, 20).background(Color.white)
                     }
                 }
-                .padding(.horizontal, 24)
+                .buttonStyle(PrimaryButtonStyle())
                 .disabled(storeManager.isLoading)
+                .padding(.horizontal, Theme.gutter)
 
-                Button(action: restore) {
-                    Text("RESTORE PURCHASE")
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
-                        .foregroundColor(.gray)
+                HStack(spacing: 24) {
+                    Button("RESTORE PURCHASE", action: restore)
+                        .buttonStyle(QuietButtonStyle())
+                        .disabled(storeManager.isLoading)
+                    Button("MAYBE LATER") { dismiss() }
+                        .buttonStyle(QuietButtonStyle())
                 }
-                .padding(.top, 16)
-                .disabled(storeManager.isLoading)
-
-                Button(action: { dismiss() }) {
-                    Text("MAYBE LATER")
-                        .font(.system(size: 11, weight: .regular, design: .monospaced))
-                        .foregroundColor(.gray.opacity(0.4))
-                }
-                .padding(.top, 12).padding(.bottom, 40)
+                .padding(.top, 8)
+                .padding(.bottom, 24)
             }
             .onAppear {
                 if storeManager.product == nil {
@@ -777,6 +879,8 @@ struct PaywallView: View {
                 }
             } message: { Text(alertMessage) }
         }
+        .presentationBackground(Color.black)
+        .presentationDragIndicator(.visible)
     }
 
     private func purchase() {

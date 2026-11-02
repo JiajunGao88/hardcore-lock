@@ -1,5 +1,8 @@
 # FIFTEEN - Hardcore App Blocker
 
+[![iOS CI](https://github.com/JiajunGao88/hardcore-lock/actions/workflows/ios-ci.yml/badge.svg)](https://github.com/JiajunGao88/hardcore-lock/actions/workflows/ios-ci.yml)
+[![SwiftLint](https://github.com/JiajunGao88/hardcore-lock/actions/workflows/swiftlint.yml/badge.svg)](https://github.com/JiajunGao88/hardcore-lock/actions/workflows/swiftlint.yml)
+
 A brutally honest iOS app that blocks distracting apps with **no way to unlock early**. Once you commit, there's no going back.
 
 > *"NO ESCAPE. NO REFUNDS."*
@@ -17,6 +20,14 @@ FIFTEEN (Hardcord Lock App) is a focus/digital detox application that uses Apple
 - **Custom Duration** - Choose from presets (15m to 12h) or set custom durations up to 30 days
 - **No Unlock Button** - The shield screen intentionally has no way to bypass
 - **Persistence** - Lock survives app termination, phone restarts, and force quits
+- **Tamper-resistant clock** - Changing the system date/time neither ends a lock
+  early nor skews its countdown (monotonic clock within a boot)
+- **Uninstall protection** - While a block is on, apps can't be deleted —
+  including FIFTEEN itself (toggle on the NOW screen; on by default)
+- **Schedule lock-in** - A schedule that is blocking can't be switched off,
+  edited or deleted until its window ends
+- **Health checks** - The home screen says so when Screen Time access is off or
+  the App Group is missing, instead of silently not blocking
 - **Total Time Tracking** - Tracks cumulative time spent in focus sessions
 
 ### Three Modes (v3.1+)
@@ -28,13 +39,24 @@ The home screen has a **NOW / SCHEDULE / AI** switcher:
   on and off by itself in the background, even with the app closed. Overnight
   windows (e.g. 22:00 → 06:00) are supported.
 - **AI** — *predict & prevent*. The app learns, fully on-device, **when** you
-  reach for your distracting apps, then sends a nudge a few minutes **before**
-  your personal peak window so you can pre-commit to a lock — on your command,
-  never automatically. Acting before the cue is the core of habit change.
+  reach for your distracting apps — separately for each weekday — then sends a
+  nudge **before** that day's peak so you can pre-commit to a lock, on your
+  command, never automatically. Under the hood:
+  - a **hierarchical Bayesian (Beta-Binomial) model** per weekday × hour, shrunk
+    toward the all-days estimate, with a 21-day forgetting half-life and
+    decisions made on the posterior lower bound (no "habits" from 3 samples);
+  - a **Thompson-sampling bandit** that learns which nudge lead time
+    (5–30 min) you actually act on, from LOCK NOW vs. dismiss;
+  - an optional **on-device language-model coach** (iOS 26 + Apple
+    Intelligence, Foundation Models) that turns the numbers into a short
+    weekly insight and nudge copy.
+
+  See [ADR-0001](docs/adr/0001-v4-enforcement-learning-ci.md) for why this is
+  the right model given what iOS lets an app see.
 
 > **Privacy:** AI mode never sends usage data anywhere. Apple sandboxes Screen
-> Time usage data on the device; the prediction is a transparent on-device
-> frequency model (no cloud, no external AI calls). Schedule + AI are Pro features.
+> Time usage data on the device; every model here runs on the device (no
+> cloud, no external AI calls). Schedule + AI are Pro features.
 
 ### Shield Screen
 - Full-screen black shield when trying to open blocked apps
@@ -63,13 +85,16 @@ Hardcord Lock App/
 │   ├── BlockModesView.swift           # Schedule + AI screens
 │   ├── SharedKit.swift                # SHARED w/ extension: App Group, named
 │   │                                  #   stores, models, week-parity, AI stats
+│   ├── LockGuard.swift                # SHARED: lock record, tamper-resistant
+│   │                                  #   clock, segmented DeviceActivity backstop
+│   ├── HabitModel.swift               # SHARED: Bayesian model + bandit + planner
+│   ├── AICoach.swift                  # On-device LLM coach (iOS 26+, optional)
 │   ├── ScheduleManager.swift          # Schedule CRUD + DeviceActivity registration
 │   ├── HabitEngine.swift              # AI: learn → predict → nudge → challenge
 │   ├── AppBlocker.swift               # Manual/AI lock (isolated `.manual` store)
 │   ├── LockManager.swift              # Timer & state management
 │   ├── FamilyControlsManager.swift    # Screen Time authorization
-│   ├── StoreManager.swift             # In-App Purchase handling
-│   └── Item.swift                     # SwiftData model (unused)
+│   └── StoreManager.swift             # In-App Purchase handling
 │
 ├── DeviceActivityManager/             # App Extension
 │   ├── DeviceActivityMonitorExtension.swift
@@ -95,7 +120,9 @@ Hardcord Lock App/
   - `intervalDidStart`: For a **schedule** window, applies the shield to that
     schedule's isolated store (after an every-N-weeks parity check). For an **AI**
     window, marks the day as observed.
-  - `intervalDidEnd`: Clears the relevant store — manual lock, or the schedule
+  - `intervalDidEnd`: For the manual lock, checks the lock record against the
+    tamper-resistant clock and either clears it or re-shields and arms the next
+    segment. For a schedule, clears the relevant store — the schedule
     whose window just ended (overnight windows clear only on the morning segment).
     Named stores keep manual / schedule / other locks from clearing each other.
   - `eventDidReachThreshold`: Records an AI "heavy use" hit for the current
@@ -119,7 +146,7 @@ Hardcord Lock App/
 | `DeviceActivity` | Schedule monitoring intervals |
 | `ManagedSettingsUI` | Customize shield appearance |
 | `StoreKit` | In-App Purchase |
-| `SwiftData` | Data persistence (minimal use) |
+| `FoundationModels` | Optional on-device coach (iOS 26+) |
 | `UserNotifications` | Lock completion alerts |
 
 ## 🔧 Technical Details
@@ -128,22 +155,21 @@ Hardcord Lock App/
 
 1. **Authorization**: User grants Screen Time access via `FamilyControls`
 2. **Selection**: User picks apps/categories using `FamilyActivityPicker`
-3. **Scheduling**: `DeviceActivityCenter` schedules a monitoring interval
-4. **Shielding**: `ManagedSettingsStore` applies shields to selected apps
-5. **Persistence**: Lock end time stored in `UserDefaults` to survive restarts
-6. **Completion**: `DeviceActivityMonitor` extension removes shields when interval ends
+3. **Record**: a `ManualLockRecord` (wall-clock start/end, monotonic start,
+   boot ID) is written to the App Group so the app and extension agree
+4. **Shielding**: `ManagedSettingsStore` applies shields (and, optionally,
+   `denyAppRemoval`) to the selected apps
+5. **Backstop**: `DeviceActivityCenter` arms a ≤24h interval with absolute
+   date components; the extension chains the next one until the lock is over
+6. **Completion**: whoever first sees `LockGuard` report the lock expired
+   (extension or app) lifts the shield; the app credits TIME SAVED
 
-### State Persistence
+### Why the clock can't be gamed
 
-```swift
-// Lock survives app termination
-UserDefaults.standard.set(lockEndTime, forKey: "lockEndTime")
-
-// On app launch, check for pending lock
-if savedEndTime > now {
-    // Resume lock with remaining time
-}
-```
+Within one boot, expiry is judged by `CLOCK_MONOTONIC_RAW` (keeps counting
+while asleep; unaffected by Settings › Date & Time). Only after a reboot does
+the wall clock decide. Every uncertain path fails **closed**: at worst a shield
+stays up until the app is next opened.
 
 ### Minimum Duration
 - **15 minutes minimum** - Enforced to prevent trivial locks
@@ -251,9 +277,27 @@ If the App Group is missing/mismatched, scheduled shields silently never apply
 ## ⚠️ Important Notes
 
 - **Physical device required** - Screen Time APIs don't work in Simulator
-- **Cannot be bypassed** - By design, there's no way to unlock early
-- **App deletion won't help** - Shield is system-level, persists even if app is deleted
-- **Reinstalling app** - Will detect existing lock from UserDefaults and resume
+- **No unlock button** - By design, there's no way to unlock early in the app
+- **App deletion** - Blocked while a block is on (uninstall protection). With
+  it switched off, deleting FIFTEEN removes its shields — that is iOS behaviour
+- **Known limit** - With `.individual` authorization, iOS always lets the user
+  revoke FIFTEEN's Screen Time access in Settings. The app detects it and says
+  so. For a truly locked-down setup, have someone else set a Screen Time passcode
+
+## 🔁 Continuous Integration
+
+GitHub Actions (`.github/workflows/`):
+
+| Workflow | What it does |
+|----------|--------------|
+| `ios-ci.yml` | Simulator build + unit tests (uploads `.xcresult`), **Xcode Analyze**, and an unsigned **Release device build** — on every push and PR |
+| `swiftlint.yml` | SwiftLint (config in `.swiftlint.yml`) |
+| `codeql.yml` | CodeQL security scan for Swift — PRs to `main` + weekly |
+| `dependabot.yml` | Keeps the Actions versions current |
+
+CI builds unsigned (`CODE_SIGNING_ALLOWED=NO`) because Screen Time entitlements
+need a real provisioning profile; that still compiles and links all three
+targets. Shields themselves can only be verified on a physical device.
 
 ## 🧪 Debug Features
 

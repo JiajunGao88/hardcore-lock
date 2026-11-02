@@ -34,6 +34,13 @@ enum AppGroup {
     /// so don't re-resolve the suite on every access.
     private static let suite: UserDefaults? = UserDefaults(suiteName: id)
 
+    /// `UserDefaults(suiteName:)` succeeds even without the entitlement (it then
+    /// writes to a private, unshared plist), so check the container itself. When
+    /// this is false the extension can't see schedules and nothing auto-blocks.
+    static var isConfigured: Bool {
+        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: id) != nil
+    }
+
     static var defaults: UserDefaults {
         if let d = suite { return d }
         #if DEBUG
@@ -67,6 +74,22 @@ enum StoreKeys {
     static let proPurchased = "pro.purchased"
     static let scheduleTrialCount = "trial.schedule.count"
     static let aiTrialCount = "trial.ai.count"
+    /// Encoded ManualLockRecord — the running NOW / AI lock (see LockGuard).
+    static let manualLock = "lock.manual.v2"
+    /// Frozen snapshot of what the running manual lock blocks. Separate from
+    /// `manualSelection` (the picker's draft) so editing the picker can't change
+    /// a lock that is already running.
+    static let manualLockSelection = "selection.manual.lock"
+    static let preventUninstall = "hardcore.preventUninstall"
+    static let heartbeatEvent = "ext.heartbeat.event"
+    static let heartbeatTime = "ext.heartbeat.time"
+    /// Encoded HabitModel (the Bayesian per-weekday model).
+    static let aiModel = "ai.model.v2"
+    /// Encoded LeadBandit + today's pinned arm ("yyyy-MM-dd|minutes").
+    static let leadBandit = "ai.leadBandit.v1"
+    static let leadChoice = "ai.leadChoice"
+    /// One-line nudge copy written by the on-device language model, if any.
+    static let coachNudgeLine = "ai.coach.nudgeLine"
 }
 
 // MARK: - Free-trial gate
@@ -187,6 +210,10 @@ enum Shielder {
         store.shield.applicationCategories = cats.isEmpty ? nil : .specific(cats)
         store.shield.webDomains = webs.isEmpty ? nil : webs
         store.shield.webDomainCategories = cats.isEmpty ? nil : .specific(cats)
+        // Deleting FIFTEEN removes every shield it set, so while a block is up,
+        // deleting apps is denied. Lives on the same store, so it lifts exactly
+        // when this block's shield does.
+        store.application.denyAppRemoval = HardcoreSettings.preventUninstall ? true : nil
     }
 
     static func clear(_ store: ManagedSettingsStore) {
@@ -194,6 +221,7 @@ enum Shielder {
         store.shield.applicationCategories = nil
         store.shield.webDomains = nil
         store.shield.webDomainCategories = nil
+        store.application.denyAppRemoval = nil
     }
 }
 
@@ -375,18 +403,44 @@ struct AIConfig: Codable, Equatable {
     var minObservationDays: Int
     /// A window must trigger on at least this fraction of observed days to count as a peak.
     var triggerFrequency: Double
+    /// Let the bandit pick the lead time from how the user answers nudges,
+    /// instead of always using `leadMinutes`.
+    var adaptiveLead: Bool
 
     init(isEnabled: Bool = false,
          leadMinutes: Int = 15,
          lockDurationSeconds: Int = 2 * 3600,
          minObservationDays: Int = 3,
-         triggerFrequency: Double = 0.4) {
+         triggerFrequency: Double = 0.4,
+         adaptiveLead: Bool = true) {
         self.isEnabled = isEnabled
         self.leadMinutes = leadMinutes
         self.lockDurationSeconds = lockDurationSeconds
         self.minObservationDays = minObservationDays
         self.triggerFrequency = triggerFrequency
+        self.adaptiveLead = adaptiveLead
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case isEnabled, leadMinutes, lockDurationSeconds, minObservationDays, triggerFrequency, adaptiveLead
+    }
+
+    /// Tolerates configs saved by older builds: a missing key must not fail the
+    /// whole decode, which would silently reset AI mode to OFF on upgrade.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = AIConfig()
+        isEnabled = try c.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? d.isEnabled
+        leadMinutes = try c.decodeIfPresent(Int.self, forKey: .leadMinutes) ?? d.leadMinutes
+        lockDurationSeconds = try c.decodeIfPresent(Int.self, forKey: .lockDurationSeconds) ?? d.lockDurationSeconds
+        minObservationDays = try c.decodeIfPresent(Int.self, forKey: .minObservationDays) ?? d.minObservationDays
+        triggerFrequency = try c.decodeIfPresent(Double.self, forKey: .triggerFrequency) ?? d.triggerFrequency
+        adaptiveLead = try c.decodeIfPresent(Bool.self, forKey: .adaptiveLead) ?? d.adaptiveLead
+    }
+
+    /// The posterior LOWER bound an hour must clear to count as a habit. Lower
+    /// than `triggerFrequency` because it is a pessimistic bound, not a mean.
+    var peakThreshold: Double { max(0.15, triggerFrequency - 0.15) }
 
     // ── Observation coverage ────────────────────────────────────────────────
     // A "window" = one background time-slot we ask iOS to watch. Coverage runs
@@ -440,6 +494,9 @@ struct AIConfig: Codable, Equatable {
         let total = segs.reduce(0) { $0 + ($1.end - $1.start) }
         let morningSpan = segs[1].end - segs[1].start
         var nMorning = Int((Double(count) * Double(morningSpan) / Double(total)).rounded())
+        // Rounding gave the morning piece ZERO windows whenever n ≤ 4, silently
+        // leaving 00:00–02:00 unwatched; any n ≥ 2 can afford one there.
+        if count >= 2 { nMorning = max(1, nMorning) }
         nMorning = min(nMorning, max(0, count - 1))   // keep at least one evening window
         return slice(segs[0], count - nMorning) + slice(segs[1], nMorning)
     }
@@ -495,8 +552,12 @@ struct AIStats: Codable, Equatable {
     /// Per monitoring-window day key, so a window records at most one hit per day
     /// even if its threshold event re-fires (e.g. after re-registration).
     var lastHitDayKey: [String]
+    /// Behavioral weekday of each entry in `hitMinutes` (v4+). Optional so v3
+    /// data, which never recorded it, still decodes.
+    var hitWeekdays: [Int]?
 
     init() {
+        hitWeekdays = []
         hitMinutes = []
         daysObserved = 0
         lastDayKey = ""
@@ -558,10 +619,17 @@ enum AIStatsStore {
 
     static func reset() {
         AppGroup.defaults.removeObject(forKey: StoreKeys.aiStats)
+        HabitModelStore.reset()
+        // Everything learned goes, including what the bandit and coach derived.
+        for key in [StoreKeys.leadBandit, StoreKeys.leadChoice, StoreKeys.coachNudgeLine] {
+            AppGroup.defaults.removeObject(forKey: key)
+        }
     }
 
     /// Mark that we observed the user during the active part of the day.
     static func markDayObserved(now: Date) {
+        // Migrate v3 stats BEFORE this update so today isn't counted twice.
+        var model = HabitModelStore.loadOrMigrate(now: now)
         var stats = load()
         let key = dayKey(for: now)
         if stats.lastDayKey != key {
@@ -569,12 +637,19 @@ enum AIStatsStore {
             stats.lastDayKey = key
         }
         save(stats)
+
+        // Every covered hour of this behavioral day is now an observed trial.
+        let slot = BehavioralDay.slot(for: now)
+        model.observe(weekday: slot.weekday, hours: BehavioralDay.coverageHours,
+                      day: BehavioralDay.behavioralDayNumber(for: now))
+        HabitModelStore.save(model)
     }
 
     /// Record one "heavy use" threshold hit for a window (called from the extension).
     /// A window records at most one timestamp per day, so re-fired thresholds
     /// (from monitor re-registration) can't inflate the data.
     static func recordHit(window index: Int, now: Date) {
+        var model = HabitModelStore.loadOrMigrate(now: now)
         var stats = load()
         let key = dayKey(for: now)
         // Make sure a day is counted even if intervalDidStart was missed.
@@ -582,74 +657,62 @@ enum AIStatsStore {
             stats.daysObserved += 1
             stats.lastDayKey = key
         }
+        let slot = BehavioralDay.slot(for: now)
         if index >= 0 && index < stats.lastHitDayKey.count, stats.lastHitDayKey[index] != key {
             stats.lastHitDayKey[index] = key
-            // The exact time this hit fired → fine-grained peak.
-            stats.hitMinutes.append(minuteOfDay(for: now))
-            if stats.hitMinutes.count > 400 {
-                stats.hitMinutes.removeFirst(stats.hitMinutes.count - 400)
+            // The exact time this hit fired → fine-grained peak. Pad the weekday
+            // log for v3 entries that predate it so the arrays stay aligned.
+            var weekdays = stats.hitWeekdays ?? []
+            if weekdays.count < stats.hitMinutes.count {
+                weekdays = Array(repeating: 0, count: stats.hitMinutes.count - weekdays.count) + weekdays
             }
+            stats.hitMinutes.append(minuteOfDay(for: now))
+            weekdays.append(slot.weekday)
+            if stats.hitMinutes.count > 400 {
+                let excess = stats.hitMinutes.count - 400
+                stats.hitMinutes.removeFirst(excess)
+                weekdays.removeFirst(excess)
+            }
+            stats.hitWeekdays = weekdays
         }
         save(stats)
+
+        model.recordHit(weekday: slot.weekday, hour: slot.hour, day: BehavioralDay.behavioralDayNumber(for: now))
+        HabitModelStore.save(model)
     }
 }
 
 // MARK: - Prediction (shared by app + extension)
 
 enum AIPredictor {
-    /// Coarse confidence gate: which hourly bin is the user's habitual peak, or
-    /// nil while still learning / no clear pattern. Drives the histogram highlight
-    /// and the "is there a habit at all" decision.
-    static func predictedPeakIndex(config: AIConfig, stats: AIStats) -> Int? {
-        guard stats.daysObserved >= config.minObservationDays else { return nil }
-        let freqs = stats.frequencies()
-        var best: Int?
-        var bestFreq = config.triggerFrequency - 0.0001
-        for (i, f) in freqs.enumerated() where f >= config.triggerFrequency {
-            if f > bestFreq { bestFreq = f; best = i }
-        }
-        return best
-    }
-
-    /// Fine peak time-of-day (minute 0–1439) to ~5-minute resolution, located from
-    /// the recorded hit timestamps with a triangular kernel so a handful of noisy
-    /// samples can't fabricate a false sharp peak. Nil until enough samples.
-    static func predictedPeakMinute(stats: AIStats) -> Int? {
-        let samples = stats.hitMinutes
-        guard samples.count >= AIConfig.minPeakSamples else { return nil }
-        // Work on the coverage's linear axis so a peak straddling midnight isn't split.
-        let lo = AIConfig.coverageStartHour * 60
-        let hi = AIConfig.coverageEndHour * 60
-        let lin = samples.map { AIConfig.linearPosition($0) }
-        let h = Double(AIConfig.peakKernelHalfWidth)
-        var bestPos = lo
-        var bestScore = -1.0
-        var p = lo
-        while p < hi {
-            var score = 0.0
-            for s in lin {
-                let d = abs(Double(s - p))
-                if d < h { score += 1.0 - d / h }
-            }
-            if score > bestScore { bestScore = score; bestPos = p }
-            p += AIConfig.binMinutes
-        }
-        return bestPos % 1440
+    /// This week's nudges, one per weekday that has a confident habit, or none
+    /// while the model is still learning. See HabitModel for the statistics.
+    static func weeklyPlan(config: AIConfig, stats: AIStats, model: HabitModel, leadMinutes: Int) -> [NudgePlan] {
+        guard stats.daysObserved >= config.minObservationDays else { return [] }
+        return NudgePlanner.plan(model: model, samples: stats.hitMinutes, sampleWeekdays: stats.hitWeekdays,
+                                 config: config, leadMinutes: leadMinutes)
     }
 }
 
-// MARK: - Pre-cue nudge (shared so the extension can re-arm it in the background)
+// MARK: - Pre-cue nudges (shared so the extension can re-arm them in the background)
 
 enum NudgeScheduler {
+    /// v3's single every-day nudge; still removed so an upgrade never leaves it firing.
     static let identifier = "ai.nudge"
     static let categoryIdentifier = "AI_NUDGE"
+    /// userInfo key carrying the lead time a nudge was sent with, so the answer
+    /// can be credited to the right bandit arm.
+    static let leadKey = "leadMinutes"
 
-    /// Recompute the predicted peak and (re)arm the daily pre-cue notification.
-    /// Idempotent — safe to call from the app foreground OR the monitor extension
-    /// on day rollover, so a shifting peak never leaves a stale nudge firing.
-    static func reschedule() {
+    static func identifier(weekday: Int) -> String { "ai.nudge.\(weekday)" }
+    static var allIdentifiers: [String] { [identifier] + (1...7).map { identifier(weekday: $0) } }
+
+    /// Recompute the plan and (re)arm one weekly-repeating nudge per weekday.
+    /// Idempotent — safe from the app foreground OR the monitor extension, so a
+    /// shifting habit never leaves a stale nudge firing.
+    static func reschedule(now: Date = Date()) {
         let center = UNUserNotificationCenter.current()
-        center.removePendingNotificationRequests(withIdentifiers: [identifier])
+        center.removePendingNotificationRequests(withIdentifiers: allIdentifiers)
 
         let config = AIConfigStore.load()
         guard config.isEnabled else { return }
@@ -657,30 +720,32 @@ enum NudgeScheduler {
         guard let sel = SelectionStore.load(forKey: StoreKeys.aiSelection),
               !SelectionStore.isEmpty(sel) else { return }
 
-        let stats = AIStatsStore.load()
-        // Coarse gate: only nudge once there's a real habit.
-        guard let peak = AIPredictor.predictedPeakIndex(config: config, stats: stats) else { return }
-        // Fine timing: the precise minute from the timestamps, falling back to the
-        // peak hour until enough samples have accumulated.
-        let targetMinute = AIPredictor.predictedPeakMinute(stats: stats) ?? (AIConfig.displayBinStartHour(peak) * 60)
-        // Wrap, don't clamp: a 00:05 peak with a 15-min lead fires at 23:50 the
-        // previous evening, not at midnight.
-        let fireMinutes = AIConfig.nudgeMinute(peakMinute: targetMinute, leadMinutes: config.leadMinutes)
-        var fire = DateComponents()
-        fire.hour = fireMinutes / 60
-        fire.minute = fireMinutes % 60
+        let lead = LeadBanditStore.todaysLead(config: config, now: now)
+        let plans = AIPredictor.weeklyPlan(config: config, stats: AIStatsStore.load(),
+                                           model: HabitModelStore.loadOrMigrate(now: now), leadMinutes: lead)
+        let coachLine = AppGroup.defaults.string(forKey: StoreKeys.coachNudgeLine)
+        let dayNames = Calendar.current.weekdaySymbols
 
-        let content = UNMutableNotificationContent()
-        content.title = "BEAT THE URGE"
-        content.body = "You usually reach for these apps around \(AIConfig.minuteLabel(targetMinute)). Challenge yourself — lock now before the urge hits?"
-        content.sound = .default
-        content.categoryIdentifier = categoryIdentifier
+        for plan in plans {
+            var fire = DateComponents()
+            fire.weekday = plan.fireWeekday
+            fire.hour = plan.fireMinute / 60
+            fire.minute = plan.fireMinute % 60
 
-        let trigger = UNCalendarNotificationTrigger(dateMatching: fire, repeats: true)
-        center.add(UNNotificationRequest(identifier: identifier, content: content, trigger: trigger))
+            let day = dayNames[plan.weekday - 1]
+            let content = UNMutableNotificationContent()
+            content.title = "BEAT THE URGE"
+            content.body = coachLine ?? "On \(day)s you usually reach for these apps around \(AIConfig.minuteLabel(plan.peakMinute)) (\(Int(plan.probability * 100))% of the time). Lock in now, before the urge hits?"
+            content.sound = .default
+            content.categoryIdentifier = categoryIdentifier
+            content.userInfo = [leadKey: lead]
+
+            let trigger = UNCalendarNotificationTrigger(dateMatching: fire, repeats: true)
+            center.add(UNNotificationRequest(identifier: identifier(weekday: plan.weekday), content: content, trigger: trigger))
+        }
     }
 
     static func cancel() {
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [identifier])
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: allIdentifiers)
     }
 }
