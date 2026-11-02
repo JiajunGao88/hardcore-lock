@@ -152,6 +152,14 @@ final class AIConfigTests: XCTestCase {
         }
     }
 
+    func testClockHoursCoverOnlyTheWindow() {
+        XCTAssertEqual(AIConfig.clockHours(startMin: 20 * 60, endMin: 21 * 60), [20])
+        XCTAssertEqual(AIConfig.clockHours(startMin: 7 * 60, endMin: 11 * 60 + 15), [7, 8, 9, 10, 11])
+        XCTAssertEqual(AIConfig.clockHours(startMin: 23 * 60, endMin: 1440), [23])
+        XCTAssertEqual(AIConfig.clockHours(startMin: 0, endMin: 120), [0, 1])
+        XCTAssertEqual(AIConfig.clockHours(startMin: 60, endMin: 60), [])
+    }
+
     func testLegacyConfigDecodesWithoutResettingAIMode() throws {
         // A v3 config: no adaptiveLead key.
         let json = #"{"isEnabled":true,"leadMinutes":20,"lockDurationSeconds":3600,"minObservationDays":3,"triggerFrequency":0.4}"#

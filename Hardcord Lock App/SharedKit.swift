@@ -69,6 +69,9 @@ enum StoreKeys {
     /// (so the other can respect the 20-activity system cap).
     static let scheduleActivityCount = "budget.schedule"
     static let aiActivityCount = "budget.ai"
+    /// [[startMin, endMin]] per registered AI window, by window index, so the
+    /// extension knows which hours a window that just ended actually watched.
+    static let aiWindowLayout = "ai.windows.v1"
     /// Free-trial bookkeeping (shared: the monitor extension both reads and
     /// increments the schedule counter when a scheduled session fires).
     static let proPurchased = "pro.purchased"
@@ -480,6 +483,12 @@ struct AIConfig: Codable, Equatable {
         return [(lo, 1440), (0, hiLinear - 1440)]   // evening 07:00–24:00, morning 00:00–02:00
     }
 
+    /// Clock hours (0…23) a same-day window [startMin, endMin) overlaps.
+    static func clockHours(startMin: Int, endMin: Int) -> [Int] {
+        guard endMin > startMin else { return [] }
+        return (startMin / 60...(endMin - 1) / 60).map { $0 % 24 }
+    }
+
     /// Monitoring layout for `n` windows, split between the evening and morning
     /// pieces in proportion to their length so none crosses midnight.
     static func windowLayout(_ n: Int) -> [(startMin: Int, endMin: Int)] {
@@ -629,7 +638,7 @@ enum AIStatsStore {
     /// Mark that we observed the user during the active part of the day.
     static func markDayObserved(now: Date) {
         // Migrate v3 stats BEFORE this update so today isn't counted twice.
-        var model = HabitModelStore.loadOrMigrate(now: now)
+        _ = HabitModelStore.loadOrMigrate(now: now)
         var stats = load()
         let key = dayKey(for: now)
         if stats.lastDayKey != key {
@@ -637,11 +646,23 @@ enum AIStatsStore {
             stats.lastDayKey = key
         }
         save(stats)
+    }
 
-        // Every covered hour of this behavioral day is now an observed trial.
-        let slot = BehavioralDay.slot(for: now)
-        model.observe(weekday: slot.weekday, hours: BehavioralDay.coverageHours,
-                      day: BehavioralDay.behavioralDayNumber(for: now))
+    /// A monitoring window ran to its end → its hours were watched today. Only
+    /// these hours become trials: crediting the whole day on the first window
+    /// start fabricated zero-hit days for hours that were never monitored
+    /// (enabling AI at 20:00 counted 07:00–19:00 as "no heavy use").
+    static func markWindowObserved(window index: Int, now: Date) {
+        let layout = AppGroup.defaults.array(forKey: StoreKeys.aiWindowLayout) as? [[Int]] ?? []
+        guard index >= 0, index < layout.count, layout[index].count == 2 else { return }
+        var model = HabitModelStore.loadOrMigrate(now: now)
+        // The end callback lands at (or just after) the boundary; step back so
+        // a window ending at 02:00 still belongs to the night it watched.
+        let inside = now.addingTimeInterval(-60)
+        let slot = BehavioralDay.slot(for: inside)
+        model.observe(weekday: slot.weekday,
+                      hours: AIConfig.clockHours(startMin: layout[index][0], endMin: layout[index][1]),
+                      day: BehavioralDay.behavioralDayNumber(for: inside))
         HabitModelStore.save(model)
     }
 

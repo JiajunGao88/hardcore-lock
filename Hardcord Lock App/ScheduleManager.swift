@@ -224,6 +224,7 @@ final class ScheduleManager: ObservableObject {
         if neededCost > available - aiWindows.count, !aiWindows.isEmpty {
             center.stopMonitoring(aiWindows)
             AppGroup.defaults.set(0, forKey: StoreKeys.aiActivityCount)
+            AppGroup.defaults.removeObject(forKey: StoreKeys.aiWindowLayout)
         }
 
         var starved: [String] = []

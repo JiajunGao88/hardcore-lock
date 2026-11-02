@@ -30,9 +30,10 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
         } else if let parsed = ActivityNaming.parseSchedule(raw) {
             applyScheduleShield(parsed)
         } else if ActivityNaming.parseAIWindow(raw) != nil {
-            // The AI observation window opened → mark that today was observed,
-            // then re-sync the pre-cue nudges in case the predicted peak shifted
-            // (the app may have been closed for days while the model learned).
+            // The AI observation window opened → count today as observed (its
+            // hours become model trials when the window ENDS), then re-sync the
+            // pre-cue nudges in case the predicted peak shifted (the app may
+            // have been closed for days while the model learned).
             AIStatsStore.markDayObserved(now: Date())
             NudgeScheduler.reschedule()
         }
@@ -47,6 +48,12 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
 
         if raw == ActivityNaming.manual {
             endManualSegment()
+            return
+        }
+
+        if let index = ActivityNaming.parseAIWindow(raw) {
+            // Only a window that ran to its end counts as watched hours.
+            AIStatsStore.markWindowObserved(window: index, now: Date())
             return
         }
 

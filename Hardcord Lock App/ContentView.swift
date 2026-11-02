@@ -416,6 +416,10 @@ struct ContentView: View {
 
     private var shieldView: some View {
         VStack(spacing: 0) {
+            // A revoked authorization must be visible here too: otherwise the
+            // countdown keeps implying enforcement after blocking has stopped.
+            healthBanners
+
             Spacer()
 
             countdownText(size: 56)

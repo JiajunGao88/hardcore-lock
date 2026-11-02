@@ -231,6 +231,7 @@ final class HabitEngine: ObservableObject {
         let eventName = DeviceActivityEvent.Name("heavyUse")
 
         var registered = 0
+        var layout: [[Int]] = []
         for (i, w) in AIConfig.windowLayout(n).enumerated() {
             let start = DateComponents(hour: w.startMin / 60, minute: w.startMin % 60)
             // Keep the interval inside the same calendar day.
@@ -246,12 +247,14 @@ final class HabitEngine: ObservableObject {
                     events: [eventName: event]
                 )
                 registered += 1
+                layout.append([w.startMin, min(w.endMin, 1440)])
             } catch {
                 lastBudgetWarning = "AI mode couldn't start all monitors (iOS background-timer limit)."
                 break
             }
         }
         AppGroup.defaults.set(registered, forKey: StoreKeys.aiActivityCount)
+        AppGroup.defaults.set(layout, forKey: StoreKeys.aiWindowLayout)
         registeredSelection = registered > 0 ? watchedSelection : nil
     }
 
@@ -259,6 +262,7 @@ final class HabitEngine: ObservableObject {
         let windows = center.activities.filter { $0.rawValue.hasPrefix(ActivityNaming.aiWindowPrefix) }
         if !windows.isEmpty { center.stopMonitoring(windows) }
         AppGroup.defaults.set(0, forKey: StoreKeys.aiActivityCount)
+        AppGroup.defaults.removeObject(forKey: StoreKeys.aiWindowLayout)
         registeredSelection = nil
     }
 
